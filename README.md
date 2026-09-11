@@ -33,19 +33,39 @@ warning-free test, tunnel instead:
 cloudflared tunnel --url http://localhost:8000
 ```
 
-## Deploying to GitHub Pages
+## Live site
+
+**https://kebonly.github.io/ar-js-spiro-poster/**
+
+Served from `main` / root by GitHub Pages, with HTTPS enforced and `http://`
+301-redirecting to `https://` — which matters, because browsers only grant
+camera access on a secure origin.
+
+Deploying is just pushing:
 
 ```bash
-gh repo create ar-js-spiro-poster --public --source=. --push
+git push
 ```
 
-Then in the repository: **Settings → Pages → Source: Deploy from a branch →
-`main` / `(root)`**. The site appears at
-`https://<user>.github.io/ar-js-spiro-poster/` within a minute or two. GitHub
-Pages serves HTTPS by default, which is all AR.js needs.
+A push takes a minute or so to go live. Note the repository is **public**;
+GitHub Pages on a free account cannot serve from a private repo, so the
+microscopy MP4s are publicly fetchable.
 
-Generate a QR code pointing at that URL and print it next to the marker — that
-is how people will actually find the page.
+## Putting it on the poster
+
+Open [`print.html`](print.html). It builds the callout that goes on the
+poster: the marker, a QR code to the live URL, and the three steps a viewer
+needs. Set the marker size in millimetres and print **at 100% scale**.
+
+The marker sits at the *top* of the callout deliberately — the video renders
+1.8 marker-widths above the marker, so anything placed above it gets covered.
+The dashed box shows the clear space to leave; it isn't printed.
+
+At the default 80 mm marker the video renders about 192 mm wide, centred
+144 mm above the marker, and the QR is ~50 mm (1.2 mm per module, comfortable
+to scan at arm's length).
+
+Change the URL field if you ever move the site — the QR regenerates live.
 
 ## Printing the marker
 

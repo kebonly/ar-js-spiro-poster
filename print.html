@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poster callout &mdash; Spirochete AR</title>
+<script src="vendor/qrcode.js"></script>
+<style>
+  :root { --square-mm: 80; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #16202e; background: #f4f6f9;
+    margin: 0; padding: 32px; line-height: 1.55;
+  }
+  .page { max-width: 52rem; margin: 0 auto; }
+  .panel {
+    background: #fff; padding: 26px 30px 30px;
+    border-radius: 12px; box-shadow: 0 2px 18px rgba(20,30,50,.09);
+    margin-bottom: 26px;
+  }
+  h1 { margin: 0 0 4px; font-size: 1.35rem; }
+  label { font-size: .92rem; display: inline-block; margin-right: 18px; }
+  input[type=number] { width: 5rem; }
+  input[type=text] { width: min(100%, 30rem); }
+  input { padding: 6px 9px; font: inherit; border: 1px solid #c6cede; border-radius: 5px; }
+  button { font: inherit; padding: 9px 20px; border: 0; border-radius: 6px;
+           background: #16202e; color: #fff; cursor: pointer; }
+  .warn { background: #fff6e5; border-left: 4px solid #e0a33a;
+          padding: 11px 15px; border-radius: 0 6px 6px 0; margin: 16px 0 0;
+          font-size: .92rem; }
+
+  /* ── the thing that actually gets printed ─────────────────────────────
+     Marker sits at the TOP of the callout on purpose: the video renders
+     1.8 marker-widths ABOVE the marker, so anything placed above it would
+     be covered. Instructions go underneath. */
+  .callout {
+    display: inline-block;
+    padding: 0;
+    text-align: center;
+  }
+  .clearance {
+    width: calc(var(--square-mm) * 2.7 * 1mm);
+    height: calc(var(--square-mm) * 2.9 * 1mm);
+    border: 1.5px dashed #b9c3d4;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: #93a0b5; font-size: .85rem; text-align: center;
+    margin: 0 auto 6px;
+  }
+  #markerImg {
+    width: calc(var(--square-mm) * 1.3333 * 1mm);
+    display: block; margin: 0 auto;
+    image-rendering: pixelated;
+  }
+  .strip {
+    display: flex; align-items: center; gap: calc(var(--square-mm) * 0.09 * 1mm);
+    justify-content: center;
+    margin-top: calc(var(--square-mm) * 0.05 * 1mm);
+  }
+  #qr { width: calc(var(--square-mm) * 0.62 * 1mm); height: auto; display: block; }
+  #qr rect { shape-rendering: crispEdges; }
+  .steps { text-align: left; font-size: calc(var(--square-mm) * 0.052 * 1mm); }
+  .steps .title {
+    font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    font-size: calc(var(--square-mm) * 0.055 * 1mm); margin-bottom: .35em;
+  }
+  .steps ol { margin: 0; padding-left: 1.25em; }
+  .steps li { margin-bottom: .1em; }
+  .url {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: calc(var(--square-mm) * 0.036 * 1mm);
+    color: #5b6880; margin-top: .5em; word-break: break-all;
+  }
+
+  @media print {
+    body { background: #fff; padding: 0; margin: 0; }
+    .noprint { display: none !important; }
+    .panel { display: none; }
+    .callout { padding: 0; }
+    .clearance { border: none; }        /* keep the space, drop the outline */
+    .clearance span { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="panel noprint">
+  <h1>Poster callout</h1>
+  <p style="margin:.2em 0 16px; color:#5b6880; font-size:.93rem">
+    Print this and paste it on the poster, or copy the layout into your poster
+    file. The dashed box is the clear space the video needs &mdash; it is not
+    printed, but keep it empty on the poster.
+  </p>
+
+  <div style="margin-bottom:12px">
+    <label>URL<br><input id="url" type="text" value="https://kebonly.github.io/ar-js-spiro-poster/"></label>
+  </div>
+  <div>
+    <label>Marker black square<br><input id="size" type="number" value="80" min="30" max="250" step="5"> mm</label>
+    <label>Error correction<br>
+      <select id="ecc" style="padding:6px 9px; font:inherit; border:1px solid #c6cede; border-radius:5px">
+        <option value="M">M &mdash; standard</option>
+        <option value="Q" selected>Q &mdash; tolerant of scuffs</option>
+        <option value="H">H &mdash; maximum</option>
+      </select>
+    </label>
+    <button onclick="window.print()" style="margin-left:8px">Print</button>
+  </div>
+
+  <div class="warn">
+    Print at <strong>100% scale</strong>, with &ldquo;fit to page&rdquo; off.
+    Then measure the black square &mdash; it must be
+    <span id="echo">80</span>&nbsp;mm across, or the video will be the wrong
+    size relative to your poster.
+  </div>
+  <p style="margin:14px 0 0; font-size:.9rem; color:#5b6880">
+    Video renders about <strong><span id="videoMM">192</span>&nbsp;mm</strong>
+    wide, centred <strong><span id="offsetMM">144</span>&nbsp;mm</strong> above
+    the marker.
+  </p>
+</div>
+
+<div class="callout">
+  <div class="clearance"><span>video appears here &mdash; keep clear</span></div>
+  <img id="markerImg" src="assets/marker/spiro-marker.png" alt="AR marker">
+  <div class="strip">
+    <svg id="qr" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="steps">
+      <div class="title">&#9654;&nbsp; Watch in AR</div>
+      <ol>
+        <li>Scan the code</li>
+        <li>Tap &ldquo;Start camera&rdquo;</li>
+        <li>Point it at the square above</li>
+      </ol>
+      <div class="url" id="urlEcho"></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+  var urlInput = document.getElementById('url');
+  var sizeInput = document.getElementById('size');
+  var eccInput = document.getElementById('ecc');
+
+  function renderQR(text, ecc) {
+    // typeNumber 0 lets the library pick the smallest version that fits.
+    var qr = qrcode(0, ecc);
+    qr.addData(text);
+    qr.make();
+    var n = qr.getModuleCount();
+
+    var rects = '';
+    for (var r = 0; r < n; r++) {
+      for (var c = 0; c < n; c++) {
+        if (qr.isDark(r, c)) {
+          rects += '<rect x="' + c + '" y="' + r + '" width="1" height="1"/>';
+        }
+      }
+    }
+    // 4-module quiet zone is required by the QR spec; scanners are much less
+    // reliable without it.
+    var q = 4, total = n + q * 2;
+    var svg = document.getElementById('qr');
+    svg.setAttribute('viewBox', '0 0 ' + total + ' ' + total);
+    svg.innerHTML =
+      '<rect width="' + total + '" height="' + total + '" fill="#fff"/>' +
+      '<g fill="#000" transform="translate(' + q + ',' + q + ')">' + rects + '</g>';
+    return n;
+  }
+
+  function update() {
+    var mm = Math.max(10, Number(sizeInput.value) || 80);
+    document.documentElement.style.setProperty('--square-mm', mm);
+    document.getElementById('echo').textContent = mm;
+    document.getElementById('videoMM').textContent = Math.round(mm * 2.4);
+    document.getElementById('offsetMM').textContent = Math.round(mm * 1.8);
+
+    var url = urlInput.value.trim() || 'https://example.com';
+    document.getElementById('urlEcho').textContent = url.replace(/^https?:\/\//, '');
+    renderQR(url, eccInput.value);
+  }
+
+  [urlInput, sizeInput, eccInput].forEach(function (el) {
+    el.addEventListener('input', update);
+    el.addEventListener('change', update);
+  });
+  update();
+</script>
+</body>
+</html>

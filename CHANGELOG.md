@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] — 2026-09-10
+
+### Added
+- Published to GitHub Pages at https://kebonly.github.io/ar-js-spiro-poster/
+  (public repo; Pages on a free account cannot serve from a private one).
+  Verified in production: every asset 200s with the right content type,
+  `http://` 301-redirects to `https://`, MP4s honour Range requests (206), and
+  the `moov` atom is in the first 3 KB so playback starts before the file
+  finishes downloading.
+- `print.html` — the poster callout: marker, QR code to the live URL, and the
+  three steps a viewer follows, all sized in millimetres for 100%-scale
+  printing. Marker is placed at the top of the callout because the video
+  renders above it and would otherwise cover the instructions.
+- Vendored `qrcode-generator` 1.4.4 for offline QR rendering. The generated QR
+  was read back with an independent decoder (jsQR) to confirm it resolves to
+  the exact live URL.
+
 ## [0.2.0] — 2026-09-10
 
 ### Added
