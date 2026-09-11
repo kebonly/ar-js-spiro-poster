@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0] — 2026-09-10
+
+### Changed
+- Layout is now driven by a single `LAYOUT` block (`width`, `offsetAbove`,
+  `bezelPad`), all expressed in marker widths so the poster layout stays
+  scale-independent. Previously the video width lived in the clip table and
+  the vertical offset was hardcoded in the scene markup.
+- Clips are declared once in a `CLIPS` list. The `<video>` element, the
+  switcher button, the gesture-unlock list and the tap-to-cycle order are all
+  generated from it; adding a movie previously meant editing four places that
+  had to be kept in sync by hand.
+- Clip aspect ratio is read from the file's own metadata instead of being
+  hand-entered, so a mistyped ratio can no longer stretch a video.
+- Tapping the video cycles through all clips and wraps, rather than toggling
+  between exactly two.
+
+Verified by temporarily adding a third clip: three buttons and three video
+elements were generated, and the tap cycle wrapped correctly.
+
 ## [0.3.1] — 2026-09-10
 
 ### Fixed

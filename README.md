@@ -83,6 +83,81 @@ An 80 mm square tracks from roughly 0.4–1.2 m. Scaling the marker up scales th
 range roughly proportionally — and scales the video with it, since the layout is
 expressed in marker widths.
 
+## Adjusting the layout
+
+Everything you'd normally want to change sits in one `LAYOUT` block near the
+top of the `<script>` in [`index.html`](index.html):
+
+```js
+var LAYOUT = {
+  width:       2.4,    // video width
+  offsetAbove: 1.8,    // height of the video's centre above the marker
+  bezelPad:    0.16    // border visible around the video
+};
+```
+
+**All distances are in marker widths**, where `1.0` is the printed width of
+the black square — not centimetres, not pixels. This is the important bit: the
+layout is resolution- and scale-independent, so printing the marker at a
+different size scales the video with it and nothing else needs touching.
+
+At the default 80 mm marker:
+
+| Setting | Value | On the poster |
+|---|---|---|
+| `width: 2.4` | 2.4 × 80 mm | video ~192 mm wide |
+| `offsetAbove: 1.8` | 1.8 × 80 mm | centre ~144 mm above the marker |
+
+So to make the video half as big, set `width: 1.2`. To sit it closer to the
+marker, lower `offsetAbove`. Only the height is derived — it comes from each
+clip's own aspect ratio, so the video is never stretched.
+
+`print.html` reads the same numbers back to you in millimetres as you change
+the marker size, and the dashed clearance box grows to match.
+
+## Adding another movie
+
+Drop the `.mp4` in `assets/video/` and add **one entry** to `CLIPS`, directly
+below `LAYOUT`:
+
+```js
+var CLIPS = [
+  { key: 'cluster', label: 'Cluster',
+    src: 'assets/video/spiro-cluster.mp4' },
+  { key: 'flow',    label: 'Flow',
+    src: 'assets/video/spiro-flow-visualization.mp4' },
+  { key: 'motility', label: 'Motility',           // <- new
+    src: 'assets/video/spiro-motility.mp4' }
+];
+```
+
+That's the whole change. The `<video>` element, the switcher button, the
+gesture-unlock list and the tap-to-cycle order are all generated from this
+list, and the aspect ratio is read from the file itself — so nothing has to
+be kept in sync by hand.
+
+Encode the new clip the same way as the others so it behaves on mobile:
+
+```bash
+ffmpeg -i input.mov -an \
+  -vf "scale=720:-2:flags=lanczos,fps=30,format=yuv420p" \
+  -c:v libx264 -profile:v main -level 3.1 \
+  -crf 26 -maxrate 1400k -bufsize 2800k -preset slow -g 60 \
+  -movflags +faststart \
+  assets/video/spiro-motility.mp4
+```
+
+Two things worth knowing:
+
+- **Keep it silent** (`-an`) unless you actually need audio. Muted video is
+  what lets iOS autoplay it into a WebGL texture without a fight.
+- **Watch the total payload.** Everything is fetched over conference wifi.
+  The two current clips are ~7 MB combined; a third of similar length is
+  fine, ten would not be.
+
+Buttons are laid out with flexbox and will shrink to fit, but past about four
+the labels get cramped on a phone.
+
 ## Troubleshooting marker detection
 
 Open the page with `?debug=1`:

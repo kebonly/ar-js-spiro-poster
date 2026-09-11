@@ -166,22 +166,9 @@
 
 <div id="debug" class="hidden"></div>
 
-<div id="switcher" class="hidden">
-  <button id="btnCluster" class="active">Cluster</button>
-  <button id="btnFlow">Flow</button>
-</div>
-
-<!-- ── Video sources ──────────────────────────────────────────────────────
-     Deliberately NOT inside <a-assets>: A-Frame blocks scene startup until
-     assets report ready, and these are large enough to stall it for seconds.
-     A-Frame resolves a "#id" material src with querySelector, so plain DOM
-     elements work just as well and load in the background. -->
-<video id="vid-cluster" class="texture-source"
-       src="assets/video/spiro-cluster.mp4"
-       loop muted playsinline webkit-playsinline preload="auto"></video>
-<video id="vid-flow" class="texture-source"
-       src="assets/video/spiro-flow-visualization.mp4"
-       loop muted playsinline webkit-playsinline preload="auto"></video>
+<!-- Buttons and <video> elements are both generated from the CLIPS list in
+     the script below, so a clip is declared in exactly one place. -->
+<div id="switcher" class="hidden"></div>
 
 <!-- ── AR scene ───────────────────────────────────────────────────────────
      Held in a <template> and injected on tap. AR.js opens the camera as soon
@@ -227,6 +214,7 @@
     <!-- Marker-local axes: +X right across the poster, +Y out of the paper,
          -Z up the poster. So rotation -90 about X lays a plane flat against
          the poster, and a negative Z position lifts it up the page. -->
+    <!-- position.z is overwritten from LAYOUT.offsetAbove at startup -->
     <a-entity id="screenRoot" rotation="-90 0 0" position="0 0.01 -1.8">
       <!-- Backing plate. Three separate things keep it from z-fighting with
            the video plane in front of it, because AR.js's projection uses
@@ -246,10 +234,11 @@
                depth-bias="factor: 2; units: 2"
                material="shader: flat; color: #0b1221"></a-plane>
 
+      <!-- size and material src are both set at runtime from CLIPS -->
       <a-plane id="screen"
                class="clickable"
                width="2.4" height="2.4"
-               material="shader: flat; src: #vid-cluster; side: front"></a-plane>
+               material="shader: flat; side: front"></a-plane>
     </a-entity>
   </a-marker>
 
@@ -289,26 +278,91 @@ AFRAME.registerComponent('depth-bias', {
 (function () {
   'use strict';
 
-  // Aspect ratios differ between the two clips, so the plane is resized on
-  // switch rather than letterboxed. Widths are in marker units.
-  var CLIPS = {
-    cluster: { id: '#vid-cluster', el: null, width: 2.4, aspect: 1000 / 1000 },
-    flow:    { id: '#vid-flow',    el: null, width: 2.4, aspect: 724 / 544  }
+  /* ════════════════════════════════════════════════════════════════════
+     CONFIGURATION — everything you would normally want to change.
+     ════════════════════════════════════════════════════════════════════ */
+
+  // All distances are in MARKER WIDTHS, where 1.0 is the printed width of
+  // the marker's black square. Expressing them this way means the layout
+  // stays correct at any print size: print the marker bigger and the video
+  // grows with it, in proportion.
+  //
+  // At the default 80mm marker:
+  //   width 2.4       -> video renders ~192mm wide
+  //   offsetAbove 1.8 -> centred ~144mm above the marker
+  var LAYOUT = {
+    width:       2.4,    // video width
+    offsetAbove: 1.8,    // height of the video's centre above the marker
+    bezelPad:    0.16    // border visible around the video
   };
-  var BEZEL_PAD = 0.16;
+
+  // To add another movie: drop the .mp4 in assets/video/ and add one entry
+  // here. The <video> element, the switcher button and the tap-to-cycle
+  // order are all generated from this list.
+  //
+  // "aspect" is optional — it is read from the file's own dimensions once
+  // metadata loads. Set it only if you want to force a different shape.
+  var CLIPS = [
+    { key: 'cluster', label: 'Cluster',
+      src: 'assets/video/spiro-cluster.mp4' },
+    { key: 'flow',    label: 'Flow',
+      src: 'assets/video/spiro-flow-visualization.mp4' }
+  ];
+
+  /* ══════════════════════════ end configuration ═══════════════════════ */
 
   var gate      = document.getElementById('gate');
   var loading   = document.getElementById('loading');
   var hint      = document.getElementById('hint');
   var switcher  = document.getElementById('switcher');
   var startBtn  = document.getElementById('startBtn');
-  var buttons   = { cluster: document.getElementById('btnCluster'),
-                    flow:    document.getElementById('btnFlow') };
+
+  var byKey = {};
+  var buttons = {};
+
+  // Build the <video> elements and the switcher buttons from CLIPS.
+  CLIPS.forEach(function (clip, i) {
+    byKey[clip.key] = clip;
+    clip.id = '#vid-' + clip.key;
+    clip.aspect = clip.aspect || null;   // filled in from metadata below
+
+    var v = document.createElement('video');
+    v.id = 'vid-' + clip.key;
+    v.className = 'texture-source';
+    v.src = clip.src;
+    v.loop = true;
+    v.muted = true;
+    v.preload = 'auto';
+    // Property assignment doesn't cover these two; iOS needs both present
+    // or it takes the video fullscreen instead of compositing it.
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    document.body.appendChild(v);
+    clip.el = v;
+
+    v.addEventListener('loadedmetadata', function () {
+      if (!clip.aspect && v.videoWidth && v.videoHeight) {
+        clip.aspect = v.videoWidth / v.videoHeight;
+        if (clip.key === current) layoutScreen();
+      }
+    });
+
+    var b = document.createElement('button');
+    b.id = 'btn-' + clip.key;
+    b.textContent = clip.label;
+    if (i === 0) b.className = 'active';
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      switchTo(clip.key);
+    });
+    switcher.appendChild(b);
+    buttons[clip.key] = b;
+  });
 
   // Populated once the scene template is injected.
   var scene = null, marker = null, screenEl = null, bezel = null;
 
-  var current = 'cluster';
+  var current = CLIPS[0].key;
   var markerVisible = false;
   var DEBUG = /[?&]debug=1/.test(location.search);
 
@@ -325,8 +379,8 @@ AFRAME.registerComponent('depth-bias', {
   // both elements as user-activated. Without this the second clip stays black
   // on iOS when it is switched to later.
   function unlockVideos() {
-    var jobs = Object.keys(CLIPS).map(function (key) {
-      var v = CLIPS[key].el;
+    var jobs = CLIPS.map(function (clip) {
+      var v = clip.el;
       if (!v) return Promise.resolve();
       var p = v.play();
       return (p || Promise.resolve()).then(function () {
@@ -337,27 +391,28 @@ AFRAME.registerComponent('depth-bias', {
     return Promise.all(jobs);
   }
 
-  function activeVideo() { return CLIPS[current].el; }
+  function activeVideo() { return byKey[current].el; }
 
   function layoutScreen() {
     if (!screenEl) return;
-    var clip = CLIPS[current];
-    var w = clip.width;
-    var h = clip.width / clip.aspect;
+    var clip = byKey[current];
+    var w = LAYOUT.width;
+    // Fall back to square until the file's real dimensions are known.
+    var h = w / (clip.aspect || 1);
     screenEl.setAttribute('width', w);
     screenEl.setAttribute('height', h);
-    bezel.setAttribute('width', w + BEZEL_PAD);
-    bezel.setAttribute('height', h + BEZEL_PAD);
+    bezel.setAttribute('width', w + LAYOUT.bezelPad);
+    bezel.setAttribute('height', h + LAYOUT.bezelPad);
   }
 
   function switchTo(key) {
-    if (key === current || !CLIPS[key]) return;
+    if (key === current || !byKey[key]) return;
 
-    var previous = CLIPS[current].el;
+    var previous = byKey[current].el;
     if (previous) previous.pause();
 
     current = key;
-    if (screenEl) screenEl.setAttribute('material', 'src', CLIPS[key].id);
+    if (screenEl) screenEl.setAttribute('material', 'src', byKey[key].id);
     layoutScreen();
 
     Object.keys(buttons).forEach(function (k) {
@@ -409,13 +464,17 @@ AFRAME.registerComponent('depth-bias', {
       activeVideo().pause();
     });
 
-    // Tapping the video itself also toggles, for people who never look at the
-    // buttons.
+    // Tapping the video itself cycles to the next clip, for people who never
+    // look at the buttons. Wraps, so it works for any number of clips.
     screenEl.addEventListener('click', function () {
-      switchTo(current === 'cluster' ? 'flow' : 'cluster');
+      var i = CLIPS.findIndex(function (c) { return c.key === current; });
+      switchTo(CLIPS[(i + 1) % CLIPS.length].key);
     });
 
     function ready() {
+      document.getElementById('screenRoot')
+        .setAttribute('position', { x: 0, y: 0.01, z: -LAYOUT.offsetAbove });
+      screenEl.setAttribute('material', 'src', byKey[current].id);
       layoutScreen();
       show(loading, false);
       show(switcher, true);
@@ -549,13 +608,6 @@ AFRAME.registerComponent('depth-bias', {
   }
 
   // ── wiring ─────────────────────────────────────────────────────────────
-  Object.keys(buttons).forEach(function (key) {
-    buttons[key].addEventListener('click', function (e) {
-      e.stopPropagation();
-      switchTo(key);
-    });
-  });
-
   startBtn.addEventListener('click', function () {
     // Camera access requires a secure context. localhost is exempt, which is
     // why local testing over plain http works but a LAN IP does not.
@@ -583,9 +635,6 @@ AFRAME.registerComponent('depth-bias', {
          'camera access in your browser settings and reload.');
   });
 
-  Object.keys(CLIPS).forEach(function (k) {
-    CLIPS[k].el = document.querySelector(CLIPS[k].id);
-  });
 })();
 </script>
 </body>
