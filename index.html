@@ -104,6 +104,24 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Diagnostic panel, enabled with ?debug=1. Off by default so the poster
+     experience is unaffected. */
+  #debug {
+    position: fixed; z-index: 20;
+    top: calc(8px + env(safe-area-inset-top)); left: 8px;
+    max-width: 62vw;
+    padding: 9px 11px; border-radius: 8px;
+    background: rgba(3, 7, 14, .82);
+    border: 1px solid rgba(255,255,255,.16);
+    font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre; pointer-events: auto;
+  }
+  #debug.hidden { display: none; }
+  #debug b { color: var(--accent); font-weight: 600; }
+  #debug .bad  { color: #ff8080; }
+  #debug .good { color: #7ee787; }
+  #debug input[type=range] { width: 100%; margin: 6px 0 0; }
+
   .error { color: #ff8080; font-weight: 600; }
   code { background: rgba(255,255,255,.1); padding: 2px 6px; border-radius: 4px; }
 
@@ -145,6 +163,8 @@
 </div>
 
 <div id="hint" class="hidden">Point at the spiral marker</div>
+
+<div id="debug" class="hidden"></div>
 
 <div id="switcher" class="hidden">
   <button id="btnCluster" class="active">Cluster</button>
@@ -190,13 +210,17 @@
        Smoothing matters a lot here: raw pose estimates jitter by a few
        degrees per frame, which is barely visible on a static cube but very
        obvious on a large video plane. -->
+  <!-- These must be kebab-case. HTML attribute names are case-insensitive, and
+       AR.js registers the a-marker primitive's mappings as "smooth-count" etc,
+       so a camelCase "smoothCount" is silently ignored and the default is used
+       instead — with no warning anywhere. -->
   <a-marker id="marker"
             type="pattern"
             url="assets/marker/spiro.patt"
             smooth="true"
-            smoothCount="10"
-            smoothTolerance="0.01"
-            smoothThreshold="5"
+            smooth-count="10"
+            smooth-tolerance="0.01"
+            smooth-threshold="5"
             raycaster="objects: .clickable"
             emitevents="true">
 
@@ -246,6 +270,7 @@
 
   var current = 'cluster';
   var markerVisible = false;
+  var DEBUG = /[?&]debug=1/.test(location.search);
 
   function show(el, visible) { el.classList.toggle('hidden', !visible); }
 
@@ -311,7 +336,19 @@
   // ── scene startup ──────────────────────────────────────────────────────
   function startScene() {
     var tpl = document.getElementById('sceneTemplate');
-    document.body.appendChild(tpl.content.cloneNode(true));
+    var frag = tpl.content.cloneNode(true);
+
+    if (DEBUG) {
+      // AR.js's own debug UI renders the thresholded binary image it actually
+      // runs detection on — by far the most informative view when a marker
+      // isn't being picked up.
+      var sceneEl = frag.querySelector('a-scene');
+      sceneEl.setAttribute('arjs',
+        sceneEl.getAttribute('arjs').replace('debugUIEnabled: false',
+                                             'debugUIEnabled: true'));
+    }
+
+    document.body.appendChild(frag);
 
     scene    = document.querySelector('a-scene');
     marker   = document.getElementById('marker');
@@ -347,6 +384,128 @@
 
     if (scene.hasLoaded) ready();
     else scene.addEventListener('loaded', ready);
+
+    if (DEBUG) startDiagnostics();
+  }
+
+  // ── diagnostics (?debug=1) ─────────────────────────────────────────────
+  var stats = {
+    found: 0, lastSeen: 0, frames: 0, fps: 0,
+    squares: 0, lastSquareAt: 0,
+    lastConfidence: 0, bestConfidence: 0, lastMatchAt: 0
+  };
+
+  function arContext() {
+    // Not public API, and the path has moved between AR.js versions, so reach
+    // for it defensively. Verified against 3.4.7.
+    try {
+      var sys = scene && scene.systems && scene.systems.arjs;
+      var sess = sys && (sys._arSession || sys.arSession);
+      return (sess && sess.arContext) || null;
+    } catch (e) { return null; }
+  }
+
+  function arController() {
+    var ctx = arContext();
+    return (ctx && ctx.arController) || null;
+  }
+
+  function startDiagnostics() {
+    var panel = document.getElementById('debug');
+    show(panel, true);
+
+    marker.addEventListener('markerFound', function () {
+      stats.found++;
+      stats.lastSeen = performance.now();
+    });
+
+    var lastFrameTime = performance.now();
+    setInterval(function () {
+      var now = performance.now();
+      stats.fps = Math.round(stats.frames * 1000 / (now - lastFrameTime));
+      stats.frames = 0;
+      lastFrameTime = now;
+    }, 1000);
+
+    var ctrl = null;
+
+    function attachController() {
+      ctrl = arController();
+      if (!ctrl) return;
+
+      // Expose the binarisation threshold. If the printed marker is under-lit
+      // or blown out, the black border never binarises and nothing is
+      // detected at any distance.
+      if (ctrl.setThreshold) {
+        window.setArThreshold = function (v) { ctrl.setThreshold(v); };
+      }
+
+      // This is the diagnostic that matters. ARToolKit works in two stages:
+      // find a black quadrilateral, then match its interior against the
+      // loaded pattern. Separating them tells you which half is failing —
+      // "no squares" is a lighting/contrast/geometry problem, whereas
+      // "squares but low confidence" points at the .patt, the patternRatio,
+      // or a marker too small or too oblique to resolve.
+      if (ctrl.addEventListener) {
+        ctrl.addEventListener('getMarker', function (ev) {
+          var m = ev && ev.data && ev.data.marker;
+          if (!m) return;
+          stats.lastConfidence = m.cfPatt;
+          stats.lastMatchAt = performance.now();
+          if (m.cfPatt > stats.bestConfidence) stats.bestConfidence = m.cfPatt;
+        });
+      }
+    }
+
+    function render() {
+      stats.frames++;
+
+      if (!ctrl) attachController();
+      if (ctrl && ctrl.getMarkerNum) {
+        var n = ctrl.getMarkerNum();
+        if (n > 0) { stats.squares = n; stats.lastSquareAt = performance.now(); }
+      }
+
+      var visible = marker && marker.object3D && marker.object3D.visible;
+      var pos = visible ? marker.object3D.position : null;
+      var dist = pos ? pos.length() : null;
+      var since = stats.lastSeen ? ((performance.now() - stats.lastSeen) / 1000) : null;
+
+      var camVid = document.querySelector('#arjs-video');
+      var thr = ctrl && ctrl.getThreshold ? ctrl.getThreshold() : null;
+
+      var squareRecent = stats.lastSquareAt &&
+                         (performance.now() - stats.lastSquareAt) < 500;
+      var conf = stats.lastConfidence;
+      var confRecent = stats.lastMatchAt &&
+                       (performance.now() - stats.lastMatchAt) < 500;
+
+      panel.innerHTML =
+        '<b>AR diagnostics</b>\n' +
+        'marker     ' + (visible
+            ? '<span class="good">FOUND</span>'
+            : '<span class="bad">not detected</span>') + '\n' +
+        '1 squares  ' + (squareRecent
+            ? '<span class="good">' + stats.squares + ' seen</span>'
+            : '<span class="bad">none — lighting/contrast</span>') + '\n' +
+        '2 pattern  ' + (confRecent
+            ? '<span class="' + (conf >= 0.6 ? 'good' : 'bad') + '">' +
+              conf.toFixed(3) + '</span> (need ≥0.60)'
+            : '<span class="bad">no match</span>') +
+            (stats.bestConfidence ? '  best ' + stats.bestConfidence.toFixed(2) : '') + '\n' +
+        'detections ' + stats.found +
+            (since !== null ? '   last ' + since.toFixed(1) + 's ago' : '') + '\n' +
+        'distance   ' + (dist !== null ? dist.toFixed(2) + ' marker-widths' : '—') + '\n' +
+        'render     ' + stats.fps + ' fps\n' +
+        'camera     ' + (camVid && camVid.videoWidth
+            ? camVid.videoWidth + '×' + camVid.videoHeight
+            : '<span class="bad">no feed</span>') + '\n' +
+        'threshold  ' + (thr !== null ? thr : '—') +
+            '  <i>setArThreshold(0-255)</i>';
+
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
   }
 
   // ── wiring ─────────────────────────────────────────────────────────────

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.0] — 2026-09-10
+
+### Added
+- `?debug=1` diagnostic mode. Shows AR.js's thresholded detection image plus a
+  telemetry panel that separates the two detection stages — "found a black
+  square" vs "matched the pattern" — because they fail for entirely different
+  reasons. Exposes `setArThreshold(0-255)` for binarisation problems.
+- `tests/test_patt_encoding.py`, which pins our `.patt` rotation convention
+  against AR.js's own `patt.hiro`.
+- Troubleshooting section in the README.
+
+### Fixed
+- **`.patt` rotation convention was wrong at 90° and 270°.** Our encoder used
+  `dx=y, dy=15-x` for the 90° block where AR.js uses `dx=15-y, dy=x`,
+  effectively swapping the 90° and 270° blocks. The marker still detected, but
+  reported the wrong orientation when held sideways — invisible on an upright
+  poster, and confusing anywhere else. Caught by reconstructing all four
+  reference blocks from `patt.hiro`.
+- **Marker smoothing settings were silently ignored.** `<a-marker>` maps its
+  attributes as kebab-case (`smooth-count`), so the camelCase `smoothCount`
+  never applied and the defaults (5/2) were used instead of the intended
+  (10/5). HTML attribute names being case-insensitive means this fails with no
+  warning of any kind.
+
 ## [0.1.1] — 2026-09-10
 
 ### Fixed

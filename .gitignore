@@ -7,3 +7,4 @@
 # the site; assets/video/*.mp4 is what actually gets served. Keep your own
 # backup of these. Remove this line if you'd rather version them.
 source-video/
+tests/patt.hiro

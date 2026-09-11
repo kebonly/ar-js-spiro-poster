@@ -157,7 +157,14 @@ def downsample_16(inner: list[list[int]]) -> list[list[int]]:
 
 
 def rotate(grid: list[list[int]], orientation: int) -> list[list[int]]:
-    """Sample the grid the way AR.js's pattern encoder does for each rotation."""
+    """Sample the grid the way AR.js's pattern encoder does for each rotation.
+
+    The handedness here is not a free choice -- it has to match AR.js exactly,
+    or the marker is still detected but reports the wrong rotation when held at
+    90 or 270 degrees. Verified against AR.js's own patt.hiro by
+    tests/test_patt_encoding.py, which reconstructs all four reference blocks
+    using this function.
+    """
     out = []
     for y in range(16):
         row = []
@@ -165,11 +172,11 @@ def rotate(grid: list[list[int]], orientation: int) -> list[list[int]]:
             if orientation == 0:
                 dx, dy = x, y
             elif orientation == 1:
-                dx, dy = y, 15 - x
+                dx, dy = 15 - y, x
             elif orientation == 2:
                 dx, dy = 15 - x, 15 - y
             else:
-                dx, dy = 15 - y, x
+                dx, dy = y, 15 - x
             row.append(grid[dy][dx])
         out.append(row)
     return out

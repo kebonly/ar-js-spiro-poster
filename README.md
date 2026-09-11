@@ -63,6 +63,73 @@ An 80 mm square tracks from roughly 0.4–1.2 m. Scaling the marker up scales th
 range roughly proportionally — and scales the video with it, since the layout is
 expressed in marker widths.
 
+## Troubleshooting marker detection
+
+Open the page with `?debug=1`:
+
+```
+https://<your-url>/index.html?debug=1
+```
+
+This turns on a telemetry panel plus AR.js's own debug view, which renders the
+**thresholded black-and-white image** that detection actually runs on. That
+view is the single most useful thing here — if the marker doesn't appear as a
+clean black square in it, no amount of fiddling elsewhere will help.
+
+The panel splits detection into its two real stages, because they fail for
+completely different reasons:
+
+```
+1 squares  1 seen          <- found a black quadrilateral
+2 pattern  0.992 (need ≥0.60)  <- matched its interior to spiro.patt
+```
+
+**If stage 1 says `none`** — ARToolKit can't even find a black square. This is
+almost always physical, not code:
+
+| Cause | What to do |
+|---|---|
+| Glare from overhead lights | Tilt the poster or move. Matte stock is the real fix. |
+| Too far away | An 80 mm marker works to roughly 1.2 m. Get closer, or print bigger. |
+| Too dark / too blown out | Adjust the binarisation: `setArThreshold(60)` or `setArThreshold(160)` in the console. Default is 100. |
+| Quiet zone cropped | The white margin is part of the marker. Don't trim to the black square, and don't place it on a dark background. |
+| Marker bent or curling | It must be flat. A curled corner breaks the quadrilateral. |
+| Too oblique | Detection wants roughly within 60° of face-on. |
+
+**If stage 1 finds squares but stage 2 stays below 0.60** — the square is
+found but its interior doesn't match the pattern. Now it's a configuration
+problem:
+
+- **`patternRatio` mismatch.** Ours is `0.5` and the printed marker has a
+  border 1/4 of the square's width on each side. If you regenerate the marker
+  with different proportions, this must change to match.
+- **Wrong or stale `.patt`.** Confirm `assets/marker/spiro.patt` returns HTTP
+  200 and contains 3072 numbers. If you edited the marker art, rerun
+  `tools/make_marker.py` — printing a new marker against an old `.patt` fails
+  exactly this way.
+- **Marker too small in frame** to resolve the interior. The pattern is only
+  16×16; a marker under ~40 px in the camera image can be found as a square
+  but not identified.
+
+**If both stages pass but nothing renders**, it's the scene, not tracking.
+Check `distance` in the panel — if it reads something plausible (1–4
+marker-widths), the pose is fine and the video plane is simply out of frame.
+It sits 1.8 marker-widths *above* the marker, so at close range it's off the
+top of the screen. Back away.
+
+### Things that bit us here
+
+- **A black `<body>` background hides the camera feed entirely** — feed flashes
+  on, then goes black. See the note in the changelog; AR.js puts the camera at
+  `z-index: -2`.
+- **`<a-marker>` attributes are kebab-case.** `smooth-count`, not
+  `smoothCount`. HTML attribute names are case-insensitive, so the camelCase
+  form is silently ignored and you get the default with no warning.
+- **The `.patt` rotation convention is not arbitrary.** Getting it wrong still
+  detects the marker but reports the wrong rotation at 90°/270°, which a
+  wall-mounted poster would never reveal.
+  `tests/test_patt_encoding.py` pins this against AR.js's own `patt.hiro`.
+
 ## Regenerating assets
 
 The marker generator is pure stdlib Python (no PIL/numpy):
