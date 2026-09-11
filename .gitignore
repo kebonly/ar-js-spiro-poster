@@ -1,0 +1,9 @@
+.DS_Store
+
+# Local HTTPS dev certificate — regenerated on demand by tools/serve.py
+.certs/
+
+# Original camera/render masters. These are ~30 MB and are not needed to run
+# the site; assets/video/*.mp4 is what actually gets served. Keep your own
+# backup of these. Remove this line if you'd rather version them.
+source-video/

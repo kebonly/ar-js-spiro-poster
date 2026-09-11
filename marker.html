@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Printable marker &mdash; Spirochete AR</title>
+<style>
+  :root {
+    /* Width of the BLACK SQUARE once printed. The PNG also carries a white
+       quiet zone of 1/8 of the image on each side, so the image itself must
+       be printed wider than the square: 1200/900 = 1.3333x. */
+    --square-mm: 80;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #16202e; background: #f4f6f9;
+    margin: 0; padding: 32px; line-height: 1.55;
+  }
+  .sheet {
+    max-width: 46rem; margin: 0 auto;
+    background: #fff; padding: 32px 36px 40px;
+    border-radius: 12px; box-shadow: 0 2px 18px rgba(20,30,50,.09);
+  }
+  h1 { margin-top: 0; font-size: 1.4rem; }
+  h2 { font-size: 1.02rem; margin: 26px 0 8px; }
+  ol, ul { padding-left: 1.2rem; margin: 0; }
+  li { margin-bottom: 6px; }
+  code { background: #eef1f6; padding: 2px 6px; border-radius: 4px; font-size: .9em; }
+
+  figure { margin: 24px 0; text-align: center; }
+  #marker {
+    width: calc(var(--square-mm) * 1.3333 * 1mm);
+    height: auto; display: block; margin: 0 auto;
+    image-rendering: pixelated;   /* keep the border edges crisp when scaled */
+  }
+  figcaption { font-size: .85rem; color: #5b6880; margin-top: 10px; }
+
+  .warn {
+    background: #fff6e5; border-left: 4px solid #e0a33a;
+    padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 18px 0;
+    font-size: .93rem;
+  }
+
+  .controls { margin: 18px 0; font-size: .93rem; }
+  input[type=number] { width: 5rem; padding: 5px 8px; font: inherit;
+                       border: 1px solid #c6cede; border-radius: 5px; }
+  button { font: inherit; padding: 8px 18px; border: 0; border-radius: 6px;
+           background: #16202e; color: #fff; cursor: pointer; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet { box-shadow: none; max-width: none; padding: 0; border-radius: 0; }
+    .noprint { display: none !important; }
+    figure { margin: 0; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1 class="noprint">Printable AR marker</h1>
+
+  <div class="controls noprint">
+    <label>Black square width:
+      <input id="size" type="number" value="80" min="30" max="250" step="5"> mm
+    </label>
+    <button onclick="window.print()">Print</button>
+  </div>
+
+  <div class="warn noprint">
+    Print at <strong>100% scale</strong> &mdash; switch off &ldquo;fit to page&rdquo;
+    / &ldquo;shrink to fit&rdquo;, or the marker will come out the wrong size and
+    the video will be scaled wrongly against your poster.
+  </div>
+
+  <figure>
+    <img id="marker" src="assets/marker/spiro-marker.png" alt="AR marker">
+    <figcaption class="noprint">
+      Measure the black square after printing to confirm it is
+      <span id="echo">80</span>&nbsp;mm across.
+    </figcaption>
+  </figure>
+
+  <div class="noprint">
+    <h2>Placing it on the poster</h2>
+    <ul>
+      <li>Keep the <strong>white margin</strong> around the black square. It is
+          not padding &mdash; the detector needs that quiet zone, so do not crop
+          to the square or set the marker on a dark background.</li>
+      <li>Leave roughly <strong>two marker-widths of clear space above it</strong>.
+          That is where the video appears, and viewers will instinctively
+          compare the two.</li>
+      <li>Use a <strong>matte</strong> finish if you can. Glossy lamination under
+          conference spotlights produces glare that defeats tracking.</li>
+      <li>Bigger is better for range: an 80&nbsp;mm square tracks reliably from
+          roughly 0.4&ndash;1.2&nbsp;m. Double the size to roughly double the range.</li>
+    </ul>
+
+    <h2>Sizing check</h2>
+    <p style="margin:0">
+      The video plane is 2.4 marker-widths across, so at
+      <span id="echo2">80</span>&nbsp;mm it renders about
+      <strong><span id="video">192</span>&nbsp;mm</strong> wide on the poster.
+    </p>
+  </div>
+</div>
+
+<script>
+  var input = document.getElementById('size');
+  function update() {
+    var mm = Math.max(10, Number(input.value) || 80);
+    document.documentElement.style.setProperty('--square-mm', mm);
+    document.getElementById('echo').textContent = mm;
+    document.getElementById('echo2').textContent = mm;
+    document.getElementById('video').textContent = Math.round(mm * 2.4);
+  }
+  input.addEventListener('input', update);
+  update();
+</script>
+</body>
+</html>

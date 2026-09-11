@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Spirochete AR &mdash; poster companion</title>
+
+<!-- Libraries are vendored rather than loaded from a CDN: conference wifi is
+     unreliable and a CDN miss would break the poster in front of an audience.
+     A-Frame 1.3.0 + AR.js 3.4.7 is a known-good pairing; newer A-Frame
+     releases have regressions against AR.js 3.4.x. -->
+<script src="vendor/aframe.min.js"></script>
+<script src="vendor/aframe-ar.js"></script>
+
+<style>
+  :root { --ink: #0b1221; --accent: #35d0ba; }
+
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* AR.js injects the camera feed as a fixed-position video element and sizes
+     the canvas itself; anything of ours has to sit above both. */
+  .overlay {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  .overlay.solid {
+    background: radial-gradient(circle at 50% 40%, #16233d 0%, #070b14 100%);
+    pointer-events: auto;
+  }
+  .overlay.hidden { display: none; }
+
+  h1 { font-size: 1.5rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  p  { font-size: 1rem; line-height: 1.5; margin: 0 0 20px; max-width: 30rem; opacity: .85; }
+
+  button {
+    font: inherit; font-weight: 600;
+    padding: 14px 28px; border-radius: 999px; border: 0;
+    background: var(--accent); color: var(--ink);
+    cursor: pointer; pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: scale(.97); }
+
+  /* Bottom switcher, shown only once the experience is running. */
+  #switcher {
+    position: fixed; z-index: 10;
+    left: 0; right: 0;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    display: flex; gap: 10px; justify-content: center;
+    padding: 0 16px;
+  }
+  #switcher.hidden { display: none; }
+  #switcher button {
+    flex: 1 1 0; max-width: 190px;
+    padding: 13px 10px; font-size: .95rem;
+    background: rgba(10, 16, 28, .62);
+    color: #fff;
+    border: 1.5px solid rgba(255, 255, 255, .28);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #switcher button.active {
+    background: var(--accent); color: var(--ink);
+    border-color: var(--accent);
+  }
+
+  /* "Point at the marker" hint while nothing is being tracked. */
+  #hint {
+    position: fixed; z-index: 10;
+    top: calc(16px + env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 18px; border-radius: 999px;
+    background: rgba(10, 16, 28, .62);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    font-size: .9rem; white-space: nowrap;
+    transition: opacity .25s ease;
+  }
+  #hint.hidden { opacity: 0; }
+
+  .spinner {
+    width: 34px; height: 34px; margin-bottom: 18px;
+    border: 3px solid rgba(255,255,255,.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error { color: #ff8080; font-weight: 600; }
+  code { background: rgba(255,255,255,.1); padding: 2px 6px; border-radius: 4px; }
+
+  /* AR.js appends its own unstyled error banner to <body> on camera failure.
+     We surface the same condition through the camera-error event with our own
+     UI, so suppress theirs. */
+  #error-popup { display: none !important; }
+
+  /* The video elements are decoded into WebGL textures, never displayed
+     directly. They are kept off-screen rather than display:none, which some
+     mobile browsers treat as licence to stop decoding. */
+  .texture-source {
+    position: fixed; top: 0; left: 0;
+    width: 2px; height: 2px;
+    opacity: 0.001; pointer-events: none; z-index: -1;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Start gate ─────────────────────────────────────────────────────────
+     This screen is not decoration. iOS Safari will not let a <video> feed a
+     WebGL texture unless play() has been called inside a real user gesture,
+     so the tap here is what unlocks both clips for later programmatic play().
+     It also delays the camera permission prompt until the user expects it. -->
+<div id="gate" class="overlay solid">
+  <h1>Spirochete motility in AR</h1>
+  <p>Point your camera at the spiral marker on the poster to watch the
+     recordings play in place.</p>
+  <button id="startBtn">Start camera</button>
+  <p id="gateNote" style="margin-top:18px; font-size:.82rem; opacity:.6;">
+    Your camera feed stays on your device &mdash; nothing is uploaded.
+  </p>
+</div>
+
+<div id="loading" class="overlay solid hidden">
+  <div class="spinner"></div>
+  <p>Starting camera&hellip;</p>
+</div>
+
+<div id="hint" class="hidden">Point at the spiral marker</div>
+
+<div id="switcher" class="hidden">
+  <button id="btnCluster" class="active">Cluster</button>
+  <button id="btnFlow">Flow</button>
+</div>
+
+<!-- ── Video sources ──────────────────────────────────────────────────────
+     Deliberately NOT inside <a-assets>: A-Frame blocks scene startup until
+     assets report ready, and these are large enough to stall it for seconds.
+     A-Frame resolves a "#id" material src with querySelector, so plain DOM
+     elements work just as well and load in the background. -->
+<video id="vid-cluster" class="texture-source"
+       src="assets/video/spiro-cluster.mp4"
+       loop muted playsinline webkit-playsinline preload="auto"></video>
+<video id="vid-flow" class="texture-source"
+       src="assets/video/spiro-flow-visualization.mp4"
+       loop muted playsinline webkit-playsinline preload="auto"></video>
+
+<!-- ── AR scene ───────────────────────────────────────────────────────────
+     Held in a <template> and injected on tap. AR.js opens the camera as soon
+     as the scene initialises, so leaving this in the document would fire the
+     permission prompt on page load — before the user has any idea why the
+     page wants their camera. Injecting later gives AR.js an ordinary
+     first-time startup, just deferred. -->
+<template id="sceneTemplate">
+<a-scene
+  vr-mode-ui="enabled: false"
+  loading-screen="enabled: false"
+  renderer="antialias: true; alpha: true; precision: medium; colorManagement: true"
+  embedded
+  arjs="sourceType: webcam;
+        detectionMode: mono;
+        patternRatio: 0.5;
+        maxDetectionRate: 30;
+        canvasWidth: 640;
+        canvasHeight: 480;
+        debugUIEnabled: false;">
+
+  <!-- The marker defines a local space where 1 unit == the printed width of
+       the black square. Everything below is therefore in "marker widths",
+       which keeps the layout correct at any print size.
+
+       Smoothing matters a lot here: raw pose estimates jitter by a few
+       degrees per frame, which is barely visible on a static cube but very
+       obvious on a large video plane. -->
+  <a-marker id="marker"
+            type="pattern"
+            url="assets/marker/spiro.patt"
+            smooth="true"
+            smoothCount="10"
+            smoothTolerance="0.01"
+            smoothThreshold="5"
+            raycaster="objects: .clickable"
+            emitevents="true">
+
+    <!-- Marker-local axes: +X right across the poster, +Y out of the paper,
+         -Z up the poster. So rotation -90 about X lays a plane flat against
+         the poster, and a negative Z position lifts it up the page. -->
+    <a-entity id="screenRoot" rotation="-90 0 0" position="0 0.01 -1.8">
+      <!-- backing plate, nudged behind the video to avoid z-fighting -->
+      <a-plane id="bezel"
+               width="2.56" height="2.56"
+               position="0 0 -0.005"
+               material="shader: flat; color: #0b1221; opacity: 0.92; transparent: true"></a-plane>
+
+      <a-plane id="screen"
+               class="clickable"
+               width="2.4" height="2.4"
+               material="shader: flat; src: #vid-cluster; side: front"></a-plane>
+    </a-entity>
+  </a-marker>
+
+  <a-entity camera></a-entity>
+</a-scene>
+</template>
+
+<script>
+(function () {
+  'use strict';
+
+  // Aspect ratios differ between the two clips, so the plane is resized on
+  // switch rather than letterboxed. Widths are in marker units.
+  var CLIPS = {
+    cluster: { id: '#vid-cluster', el: null, width: 2.4, aspect: 1000 / 1000 },
+    flow:    { id: '#vid-flow',    el: null, width: 2.4, aspect: 724 / 544  }
+  };
+  var BEZEL_PAD = 0.16;
+
+  var gate      = document.getElementById('gate');
+  var loading   = document.getElementById('loading');
+  var hint      = document.getElementById('hint');
+  var switcher  = document.getElementById('switcher');
+  var startBtn  = document.getElementById('startBtn');
+  var buttons   = { cluster: document.getElementById('btnCluster'),
+                    flow:    document.getElementById('btnFlow') };
+
+  // Populated once the scene template is injected.
+  var scene = null, marker = null, screenEl = null, bezel = null;
+
+  var current = 'cluster';
+  var markerVisible = false;
+
+  function show(el, visible) { el.classList.toggle('hidden', !visible); }
+
+  function fail(message, detail) {
+    gate.classList.remove('hidden');
+    gate.innerHTML =
+      '<h1 class="error">' + message + '</h1><p>' + detail + '</p>';
+  }
+
+  // ── one-time gesture unlock ────────────────────────────────────────────
+  // Calling play() then immediately pausing, inside the click handler, marks
+  // both elements as user-activated. Without this the second clip stays black
+  // on iOS when it is switched to later.
+  function unlockVideos() {
+    var jobs = Object.keys(CLIPS).map(function (key) {
+      var v = CLIPS[key].el;
+      if (!v) return Promise.resolve();
+      var p = v.play();
+      return (p || Promise.resolve()).then(function () {
+        v.pause();
+        v.currentTime = 0;
+      }).catch(function () { /* unlock is best-effort */ });
+    });
+    return Promise.all(jobs);
+  }
+
+  function activeVideo() { return CLIPS[current].el; }
+
+  function layoutScreen() {
+    if (!screenEl) return;
+    var clip = CLIPS[current];
+    var w = clip.width;
+    var h = clip.width / clip.aspect;
+    screenEl.setAttribute('width', w);
+    screenEl.setAttribute('height', h);
+    bezel.setAttribute('width', w + BEZEL_PAD);
+    bezel.setAttribute('height', h + BEZEL_PAD);
+  }
+
+  function switchTo(key) {
+    if (key === current || !CLIPS[key]) return;
+
+    var previous = CLIPS[current].el;
+    if (previous) previous.pause();
+
+    current = key;
+    if (screenEl) screenEl.setAttribute('material', 'src', CLIPS[key].id);
+    layoutScreen();
+
+    Object.keys(buttons).forEach(function (k) {
+      buttons[k].classList.toggle('active', k === current);
+    });
+
+    // Only resume if the marker is actually on screen; otherwise markerFound
+    // will start it.
+    if (markerVisible) {
+      var v = activeVideo();
+      v.currentTime = 0;
+      v.play().catch(function () {});
+    }
+  }
+
+  // ── scene startup ──────────────────────────────────────────────────────
+  function startScene() {
+    var tpl = document.getElementById('sceneTemplate');
+    document.body.appendChild(tpl.content.cloneNode(true));
+
+    scene    = document.querySelector('a-scene');
+    marker   = document.getElementById('marker');
+    screenEl = document.getElementById('screen');
+    bezel    = document.getElementById('bezel');
+
+    // Pausing when the marker leaves frame means a viewer who looks away and
+    // back resumes where they left off instead of missing content.
+    marker.addEventListener('markerFound', function () {
+      markerVisible = true;
+      show(hint, false);
+      activeVideo().play().catch(function () {});
+    });
+
+    marker.addEventListener('markerLost', function () {
+      markerVisible = false;
+      show(hint, true);
+      activeVideo().pause();
+    });
+
+    // Tapping the video itself also toggles, for people who never look at the
+    // buttons.
+    screenEl.addEventListener('click', function () {
+      switchTo(current === 'cluster' ? 'flow' : 'cluster');
+    });
+
+    function ready() {
+      layoutScreen();
+      show(loading, false);
+      show(switcher, true);
+      show(hint, true);
+    }
+
+    if (scene.hasLoaded) ready();
+    else scene.addEventListener('loaded', ready);
+  }
+
+  // ── wiring ─────────────────────────────────────────────────────────────
+  Object.keys(buttons).forEach(function (key) {
+    buttons[key].addEventListener('click', function (e) {
+      e.stopPropagation();
+      switchTo(key);
+    });
+  });
+
+  startBtn.addEventListener('click', function () {
+    // Camera access requires a secure context. localhost is exempt, which is
+    // why local testing over plain http works but a LAN IP does not.
+    if (!window.isSecureContext) {
+      fail('HTTPS required',
+           'Browsers only expose the camera on secure origins. Open this page ' +
+           'over <code>https://</code> (or on <code>localhost</code>).');
+      return;
+    }
+
+    show(gate, false);
+    show(loading, true);
+
+    // Must run inside this handler's user-gesture context, before any await.
+    unlockVideos().then(startScene, startScene);
+  });
+
+  // AR.js surfaces camera failures through this event rather than throwing.
+  window.addEventListener('camera-error', function () {
+    show(loading, false);
+    show(switcher, false);
+    show(hint, false);
+    fail('Camera unavailable',
+         'Permission was denied, or another app is using the camera. Allow ' +
+         'camera access in your browser settings and reload.');
+  });
+
+  Object.keys(CLIPS).forEach(function (k) {
+    CLIPS[k].el = document.querySelector(CLIPS[k].id);
+  });
+})();
+</script>
+</body>
+</html>
