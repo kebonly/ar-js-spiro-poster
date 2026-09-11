@@ -228,11 +228,23 @@
          -Z up the poster. So rotation -90 about X lays a plane flat against
          the poster, and a negative Z position lifts it up the page. -->
     <a-entity id="screenRoot" rotation="-90 0 0" position="0 0.01 -1.8">
-      <!-- backing plate, nudged behind the video to avoid z-fighting -->
+      <!-- Backing plate. Three separate things keep it from z-fighting with
+           the video plane in front of it, because AR.js's projection uses
+           near=0.005 / far=10000 — a ratio of 2,000,000, which leaves very
+           little usable depth precision:
+             1. a real geometric gap (0.04 marker-widths, ~3mm at an 80mm
+                marker, invisible from the front),
+             2. depth-bias, which offsets it in depth-buffer units and so
+                holds up at any viewing distance,
+             3. opaque rather than semi-transparent, so it sorts into the
+                opaque pass and draws before the video rather than after it.
+           Symptom when this goes wrong: scattered translucent navy blocks
+           scattered across the video. -->
       <a-plane id="bezel"
                width="2.56" height="2.56"
-               position="0 0 -0.005"
-               material="shader: flat; color: #0b1221; opacity: 0.92; transparent: true"></a-plane>
+               position="0 0 -0.04"
+               depth-bias="factor: 2; units: 2"
+               material="shader: flat; color: #0b1221"></a-plane>
 
       <a-plane id="screen"
                class="clickable"
@@ -246,6 +258,34 @@
 </template>
 
 <script>
+/**
+ * Push a surface away from the camera in depth-buffer units.
+ *
+ * Unlike a geometric offset, polygon offset is applied in the same units the
+ * depth buffer is quantised to, so it stays effective no matter how far away
+ * the viewer stands — which a fixed world-space gap does not, since depth
+ * resolution degrades with the square of distance.
+ *
+ * A-Frame's material component doesn't expose these three.js properties, so
+ * set them on the mesh material directly.
+ */
+AFRAME.registerComponent('depth-bias', {
+  schema: {
+    factor: { type: 'number', default: 1 },
+    units:  { type: 'number', default: 1 }
+  },
+  init: function () { this.apply(); this.el.addEventListener('materialtextureloaded', this.apply.bind(this)); },
+  update: function () { this.apply(); },
+  apply: function () {
+    var mesh = this.el.getObject3D('mesh');
+    if (!mesh || !mesh.material) return;
+    mesh.material.polygonOffset = true;
+    mesh.material.polygonOffsetFactor = this.data.factor;
+    mesh.material.polygonOffsetUnits = this.data.units;
+    mesh.material.needsUpdate = true;
+  }
+});
+
 (function () {
   'use strict';
 

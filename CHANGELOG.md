@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.1] — 2026-09-10
+
+### Fixed
+- Scattered translucent navy blocks appeared over the video while tracking.
+  The backing plate sat only 0.005 marker-widths behind the video plane, and
+  AR.js's projection uses near=0.005 / far=10000 — a ratio of 2,000,000, which
+  leaves very little usable depth precision. The two planes fought for the
+  depth test and the plate won in patches.
+
+  Fixed three ways, because a larger gap alone is not enough: depth resolution
+  degrades with the *square* of viewing distance, so a fixed world-space gap
+  that works up close can fail when someone steps back.
+  1. Real geometric gap widened to 0.04 marker-widths (~3 mm at an 80 mm
+     marker; invisible from the front).
+  2. New `depth-bias` component applies `polygonOffset`, which works in
+     depth-buffer units and therefore holds at any distance.
+  3. Backing plate is now opaque instead of 0.92 alpha, so it sorts into the
+     opaque pass and draws *before* the video rather than after it.
+
+  Verified clean at 8.7, 10.5 and closer distances, on both clips.
+
 ## [0.3.0] — 2026-09-10
 
 ### Added
