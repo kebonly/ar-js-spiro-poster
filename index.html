@@ -18,10 +18,19 @@
 
   html, body {
     margin: 0; padding: 0; height: 100%; overflow: hidden;
-    background: #000; color: #fff;
+    color: #fff;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* The dark backdrop goes on <html> ONLY, and <body> must stay transparent.
+     AR.js inserts the camera feed as a z-index:-2 element on <body>. In CSS
+     paint order, negative-z-index descendants are painted before the
+     backgrounds of in-flow block-level descendants -- so an opaque background
+     on <body> paints straight over the camera. The symptom is distinctive and
+     misleading: the feed appears for a moment, then the view goes black. */
+  html { background: #000; }
+  body { background: transparent; }
 
   /* AR.js injects the camera feed as a fixed-position video element and sizes
      the canvas itself; anything of ours has to sit above both. */

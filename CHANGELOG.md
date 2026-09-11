@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1] — 2026-09-10
+
+### Fixed
+- Camera feed appeared for a moment and then went black. The page set
+  `background: #000` on both `html` and `body`. AR.js inserts the camera feed
+  as a `z-index: -2` element on `<body>`, and in CSS paint order negative
+  z-index descendants are painted *before* the backgrounds of in-flow
+  block-level descendants — so the opaque `<body>` background covered the
+  camera. The backdrop now lives on `html` only, with `body` transparent.
+
 ## [0.1.0] — 2026-09-10
 
 Initial version: a marker-based AR companion for the spirochete poster.
