@@ -122,6 +122,40 @@
   #debug .good { color: #7ee787; }
   #debug input[type=range] { width: 100%; margin: 6px 0 0; }
 
+  /* Gestures are handled on the canvas directly, so the browser must not
+     claim the touches for scrolling or its own pinch-zoom first. */
+  a-scene canvas { touch-action: none; }
+
+  /* Transient readout shown while pinching. */
+  #zoomReadout {
+    position: fixed; z-index: 20;
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    padding: 12px 20px; border-radius: 12px;
+    background: rgba(3, 7, 14, .74);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums;
+    pointer-events: none; opacity: 0; transition: opacity .18s ease;
+    text-align: center; line-height: 1.25;
+  }
+  #zoomReadout.show { opacity: 1; }
+  #zoomReadout small {
+    display: block; font-size: .72rem; font-weight: 500;
+    opacity: .65; margin-top: 3px; letter-spacing: .02em;
+  }
+
+  /* Only offered once the viewer has actually changed the size. */
+  #resetZoom {
+    position: fixed; z-index: 20;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(74px + env(safe-area-inset-bottom));
+    padding: 9px 18px; border-radius: 999px;
+    font-size: .85rem; font-weight: 600;
+    background: rgba(10, 16, 28, .68);
+    color: #fff; border: 1.5px solid rgba(255,255,255,.28);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #resetZoom.hidden { display: none; }
+
   .error { color: #ff8080; font-weight: 600; }
   code { background: rgba(255,255,255,.1); padding: 2px 6px; border-radius: 4px; }
 
@@ -166,6 +200,9 @@
 
 <div id="debug" class="hidden"></div>
 
+<div id="zoomReadout"></div>
+<button id="resetZoom" class="hidden">Reset size</button>
+
 <!-- Buttons and <video> elements are both generated from the CLIPS list in
      the script below, so a clip is declared in exactly one place. -->
 <div id="switcher" class="hidden"></div>
@@ -208,7 +245,6 @@
             smooth-count="10"
             smooth-tolerance="0.01"
             smooth-threshold="5"
-            raycaster="objects: .clickable"
             emitevents="true">
 
     <!-- Marker-local axes: +X right across the poster, +Y out of the paper,
@@ -236,7 +272,6 @@
 
       <!-- size and material src are both set at runtime from CLIPS -->
       <a-plane id="screen"
-               class="clickable"
                width="2.4" height="2.4"
                material="shader: flat; side: front"></a-plane>
     </a-entity>
@@ -464,13 +499,6 @@ AFRAME.registerComponent('depth-bias', {
       activeVideo().pause();
     });
 
-    // Tapping the video itself cycles to the next clip, for people who never
-    // look at the buttons. Wraps, so it works for any number of clips.
-    screenEl.addEventListener('click', function () {
-      var i = CLIPS.findIndex(function (c) { return c.key === current; });
-      switchTo(CLIPS[(i + 1) % CLIPS.length].key);
-    });
-
     function ready() {
       document.getElementById('screenRoot')
         .setAttribute('position', { x: 0, y: 0.01, z: -LAYOUT.offsetAbove });
@@ -479,6 +507,7 @@ AFRAME.registerComponent('depth-bias', {
       show(loading, false);
       show(switcher, true);
       show(hint, true);
+      initGestures();
     }
 
     if (scene.hasLoaded) ready();
@@ -486,6 +515,124 @@ AFRAME.registerComponent('depth-bias', {
 
     if (DEBUG) startDiagnostics();
   }
+
+  // ── touch gestures ─────────────────────────────────────────────────────
+  // Handled on the canvas with pointer events rather than through A-Frame's
+  // raycaster. A-Frame only emits "click" on entities when the camera carries
+  // a cursor component, which AR.js scenes don't set up, so raycaster-based
+  // taps silently never fire. Doing it at the DOM level also means pinch and
+  // tap share one gesture state machine and can't both fire from one touch.
+  var ZOOM_MIN = 0.4, ZOOM_MAX = 3.0;
+  var ZOOM_KEY = 'spiro-ar-zoom';
+  var zoom = 1;
+
+  function loadZoom() {
+    var v = parseFloat(localStorage.getItem(ZOOM_KEY));
+    return (isFinite(v) && v >= ZOOM_MIN && v <= ZOOM_MAX) ? v : 1;
+  }
+
+  function applyZoom(save) {
+    var root = document.getElementById('screenRoot');
+    if (root) root.object3D.scale.set(zoom, zoom, zoom);
+    document.getElementById('resetZoom')
+            .classList.toggle('hidden', Math.abs(zoom - 1) < 0.02);
+    if (save) {
+      try { localStorage.setItem(ZOOM_KEY, zoom.toFixed(3)); } catch (e) {}
+    }
+  }
+
+  var readoutTimer = null;
+  function showReadout() {
+    var el = document.getElementById('zoomReadout');
+    // The second line is the number to paste into LAYOUT.width if you want to
+    // make the current size the permanent default.
+    el.innerHTML = zoom.toFixed(2) + '&times;' +
+      '<small>LAYOUT.width ' + (LAYOUT.width * zoom).toFixed(2) + '</small>';
+    el.classList.add('show');
+    clearTimeout(readoutTimer);
+    readoutTimer = setTimeout(function () { el.classList.remove('show'); }, 900);
+  }
+
+  function initGestures() {
+    var canvas = scene.canvas;
+    if (!canvas || canvas.dataset.gestures) return;
+    canvas.dataset.gestures = '1';
+
+    zoom = loadZoom();
+    applyZoom(false);
+
+    var pointers = new Map();
+    var pinchStartDist = 0, pinchStartZoom = 1, pinching = false;
+    var downAt = 0, downPos = null, moved = false;
+
+    function dist() {
+      var p = Array.from(pointers.values());
+      return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    }
+
+    canvas.addEventListener('pointerdown', function (e) {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        downAt = performance.now();
+        downPos = { x: e.clientX, y: e.clientY };
+        moved = false;
+      } else if (pointers.size === 2) {
+        pinching = true;
+        pinchStartDist = dist();
+        pinchStartZoom = zoom;
+        showReadout();
+      }
+    });
+
+    canvas.addEventListener('pointermove', function (e) {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.size === 1 && downPos) {
+        if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 12) moved = true;
+        return;
+      }
+      if (pointers.size === 2 && pinchStartDist > 0) {
+        e.preventDefault();
+        var next = pinchStartZoom * (dist() / pinchStartDist);
+        zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+        applyZoom(false);
+        showReadout();
+      }
+    }, { passive: false });
+
+    function release(e) {
+      pointers.delete(e.pointerId);
+
+      if (pinching) {
+        // Wait until every finger is up, so lifting one of two doesn't get
+        // mistaken for a tap.
+        if (pointers.size === 0) { pinching = false; applyZoom(true); }
+        return;
+      }
+
+      var quick = performance.now() - downAt < 400;
+      if (pointers.size === 0 && quick && !moved && markerVisible) {
+        var i = CLIPS.findIndex(function (c) { return c.key === current; });
+        switchTo(CLIPS[(i + 1) % CLIPS.length].key);
+      }
+    }
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+
+    document.getElementById('resetZoom').addEventListener('click', function (e) {
+      e.stopPropagation();
+      zoom = 1;
+      applyZoom(true);
+      showReadout();
+    });
+  }
+
+  // iOS Safari ignores user-scalable=no and will pinch-zoom the whole page
+  // unless these are cancelled explicitly.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (type) {
+    document.addEventListener(type, function (e) { e.preventDefault(); }, { passive: false });
+  });
 
   // ── diagnostics (?debug=1) ─────────────────────────────────────────────
   var stats = {

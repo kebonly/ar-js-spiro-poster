@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.0] — 2026-09-10
+
+### Added
+- Pinch-to-resize. Two fingers scale the video between 0.4x and 3x of
+  `LAYOUT.width`, clamped, remembered in `localStorage`, with a "Reset size"
+  chip offered whenever the size has been changed. The readout shows the
+  resulting `LAYOUT.width` so a size found by pinching can be pasted back into
+  the config and made the default.
+
+### Fixed
+- **Tap-to-cycle never worked on a real device.** It relied on A-Frame
+  emitting `click` on the video plane, but A-Frame only does that when the
+  camera carries a `cursor` component, which AR.js scenes don't set up. An
+  earlier test appeared to confirm the feature only because it fired
+  `emit('click')` synthetically, which exercised the handler without
+  exercising the path a real touch takes.
+
+  Taps and pinches are now both handled with pointer events on the canvas, in
+  one gesture state machine — so a pinch cannot also register as a tap, and a
+  drag doesn't switch clips. Removed the `raycaster` / `.clickable` config
+  that implied an interaction that never existed.
+- iOS Safari ignores `user-scalable=no`, so `gesturestart`/`gesturechange`/
+  `gestureend` are now cancelled explicitly to stop the browser pinch-zooming
+  the whole page instead of the video.
+
 ## [0.4.0] — 2026-09-10
 
 ### Changed

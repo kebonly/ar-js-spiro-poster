@@ -115,6 +115,30 @@ clip's own aspect ratio, so the video is never stretched.
 `print.html` reads the same numbers back to you in millimetres as you change
 the marker size, and the dashed clearance box grows to match.
 
+### Pinch to resize, on the phone
+
+Viewers can **pinch with two fingers** to scale the video between 0.4× and 3×
+of `LAYOUT.width`. A readout appears while pinching, the choice is remembered
+in `localStorage`, and a **Reset size** chip appears whenever the size has been
+changed. A single tap cycles to the next clip; a drag does not.
+
+The readout's second line shows the resulting `LAYOUT.width`:
+
+```
+1.60×
+LAYOUT.width 3.84
+```
+
+That's deliberate — pinch until it looks right on the printed poster, read the
+number off, and paste it into `LAYOUT.width` to make it the default for
+everyone. Beats guessing and re-deploying.
+
+Gestures are handled with pointer events on the canvas rather than through
+A-Frame's raycaster. A-Frame only emits `click` on entities when the camera
+has a `cursor` component, which AR.js scenes don't set up — so raycaster-based
+taps silently never fire. Doing it at the DOM level also keeps pinch and tap
+in one state machine, so a pinch can't also register as a tap.
+
 ## Adding another movie
 
 Drop the `.mp4` in `assets/video/` and add **one entry** to `CLIPS`, directly
