@@ -12,6 +12,7 @@
      releases have regressions against AR.js 3.4.x. -->
 <script src="vendor/aframe.min.js"></script>
 <script src="vendor/aframe-ar.js"></script>
+<script src="config.js"></script>
 
 <style>
   :root { --ink: #0b1221; --accent: #35d0ba; }
@@ -109,11 +110,11 @@
   #debug {
     position: fixed; z-index: 20;
     top: calc(8px + env(safe-area-inset-top)); left: 8px;
-    max-width: 62vw;
+    max-width: 78vw;
     padding: 9px 11px; border-radius: 8px;
     background: rgba(3, 7, 14, .82);
     border: 1px solid rgba(255,255,255,.16);
-    font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font: 10px/1.42 ui-monospace, SFMono-Regular, Menlo, monospace;
     white-space: pre; pointer-events: auto;
   }
   #debug.hidden { display: none; }
@@ -183,8 +184,8 @@
      It also delays the camera permission prompt until the user expects it. -->
 <div id="gate" class="overlay solid">
   <h1>Spirochete motility in AR</h1>
-  <p>Point your camera at the spiral marker on the poster to watch the
-     recordings play in place.</p>
+  <p>Point your camera at any of the markers on the poster to watch that
+     figure's recording play in place.</p>
   <button id="startBtn">Start camera</button>
   <p id="gateNote" style="margin-top:18px; font-size:.82rem; opacity:.6;">
     Your camera feed stays on your device &mdash; nothing is uploaded.
@@ -196,7 +197,7 @@
   <p>Starting camera&hellip;</p>
 </div>
 
-<div id="hint" class="hidden">Point at the spiral marker</div>
+<div id="hint" class="hidden">Point at a marker on the poster</div>
 
 <div id="debug" class="hidden"></div>
 
@@ -220,65 +221,57 @@
   renderer="antialias: true; alpha: true; precision: medium; colorManagement: true"
   embedded
   arjs="sourceType: webcam;
-        detectionMode: mono;
+        detectionMode: mono_and_matrix;
+        matrixCodeType: 3x3_HAMMING63;
         patternRatio: 0.5;
         maxDetectionRate: 30;
         canvasWidth: 640;
         canvasHeight: 480;
         debugUIEnabled: false;">
 
-  <!-- The marker defines a local space where 1 unit == the printed width of
-       the black square. Everything below is therefore in "marker widths",
-       which keeps the layout correct at any print size.
-
-       Smoothing matters a lot here: raw pose estimates jitter by a few
-       degrees per frame, which is barely visible on a static cube but very
-       obvious on a large video plane. -->
-  <!-- These must be kebab-case. HTML attribute names are case-insensitive, and
-       AR.js registers the a-marker primitive's mappings as "smooth-count" etc,
-       so a camelCase "smoothCount" is silently ignored and the default is used
-       instead — with no warning anywhere. -->
-  <a-marker id="marker"
-            type="pattern"
-            url="assets/marker/spiro.patt"
-            smooth="true"
-            smooth-count="10"
-            smooth-tolerance="0.01"
-            smooth-threshold="5"
-            emitevents="true">
-
-    <!-- Marker-local axes: +X right across the poster, +Y out of the paper,
-         -Z up the poster. So rotation -90 about X lays a plane flat against
-         the poster, and a negative Z position lifts it up the page. -->
-    <!-- position.z is overwritten from LAYOUT.offsetAbove at startup -->
-    <a-entity id="screenRoot" rotation="-90 0 0" position="0 0.01 -1.8">
-      <!-- Backing plate. Three separate things keep it from z-fighting with
-           the video plane in front of it, because AR.js's projection uses
-           near=0.005 / far=10000 — a ratio of 2,000,000, which leaves very
-           little usable depth precision:
-             1. a real geometric gap (0.04 marker-widths, ~3mm at an 80mm
-                marker, invisible from the front),
-             2. depth-bias, which offsets it in depth-buffer units and so
-                holds up at any viewing distance,
-             3. opaque rather than semi-transparent, so it sorts into the
-                opaque pass and draws before the video rather than after it.
-           Symptom when this goes wrong: scattered translucent navy blocks
-           scattered across the video. -->
-      <a-plane id="bezel"
-               width="2.56" height="2.56"
-               position="0 0 -0.04"
-               depth-bias="factor: 2; units: 2"
-               material="shader: flat; color: #0b1221"></a-plane>
-
-      <!-- size and material src are both set at runtime from CLIPS -->
-      <a-plane id="screen"
-               width="2.4" height="2.4"
-               material="shader: flat; side: front"></a-plane>
-    </a-entity>
-  </a-marker>
-
+  <!-- The <a-marker> elements themselves are generated from the MARKERS list
+       in the script below and appended here at startup. -->
   <a-entity camera></a-entity>
 </a-scene>
+</template>
+
+<!-- ── One marker's contents ──────────────────────────────────────────────
+     Cloned once per marker into its <a-marker>. These are classes, not ids,
+     because there is one copy per marker and duplicate ids would break every
+     lookup in the file.
+
+     The marker defines a local space where 1 unit == the printed width of the
+     black square. Everything here is therefore in "marker widths", which
+     keeps the layout correct at any print size. -->
+<template id="screenTemplate">
+  <!-- Marker-local axes: +X right across the poster, +Y out of the paper,
+       -Z up the poster. So rotation -90 about X lays a plane flat against
+       the poster, and a negative Z position lifts it up the page.
+       position.z is overwritten from LAYOUT.offsetAbove at startup. -->
+  <a-entity class="screenRoot" rotation="-90 0 0" position="0 0.01 -1.8">
+    <!-- Backing plate. Three separate things keep it from z-fighting with
+         the video plane in front of it, because AR.js's projection uses
+         near=0.005 / far=10000 — a ratio of 2,000,000, which leaves very
+         little usable depth precision:
+           1. a real geometric gap (0.04 marker-widths, ~3mm at an 80mm
+              marker, invisible from the front),
+           2. depth-bias, which offsets it in depth-buffer units and so
+              holds up at any viewing distance,
+           3. opaque rather than semi-transparent, so it sorts into the
+              opaque pass and draws before the video rather than after it.
+         Symptom when this goes wrong: scattered translucent navy blocks
+         scattered across the video. -->
+    <a-plane class="bezel"
+             width="2.56" height="2.56"
+             position="0 0 -0.04"
+             depth-bias="factor: 2; units: 2"
+             material="shader: flat; color: #0b1221"></a-plane>
+
+    <!-- size and material src are both set at runtime from CLIPS -->
+    <a-plane class="screen"
+             width="2.4" height="2.4"
+             material="shader: flat; side: front"></a-plane>
+  </a-entity>
 </template>
 
 <script>
@@ -313,38 +306,11 @@ AFRAME.registerComponent('depth-bias', {
 (function () {
   'use strict';
 
-  /* ════════════════════════════════════════════════════════════════════
-     CONFIGURATION — everything you would normally want to change.
-     ════════════════════════════════════════════════════════════════════ */
-
-  // All distances are in MARKER WIDTHS, where 1.0 is the printed width of
-  // the marker's black square. Expressing them this way means the layout
-  // stays correct at any print size: print the marker bigger and the video
-  // grows with it, in proportion.
-  //
-  // At the default 80mm marker:
-  //   width 2.4       -> video renders ~192mm wide
-  //   offsetAbove 1.8 -> centred ~144mm above the marker
-  var LAYOUT = {
-    width:       2.4,    // video width
-    offsetAbove: 1.8,    // height of the video's centre above the marker
-    bezelPad:    0.16    // border visible around the video
-  };
-
-  // To add another movie: drop the .mp4 in assets/video/ and add one entry
-  // here. The <video> element, the switcher button and the tap-to-cycle
-  // order are all generated from this list.
-  //
-  // "aspect" is optional — it is read from the file's own dimensions once
-  // metadata loads. Set it only if you want to force a different shape.
-  var CLIPS = [
-    { key: 'cluster', label: 'Cluster',
-      src: 'assets/video/spiro-cluster.mp4' },
-    { key: 'flow',    label: 'Flow',
-      src: 'assets/video/spiro-flow-visualization.mp4' }
-  ];
-
-  /* ══════════════════════════ end configuration ═══════════════════════ */
+  // Configuration lives in config.js, shared with print.html so the printed
+  // markers can never drift from what this page actually looks for.
+  var LAYOUT         = window.SPIRO_AR.LAYOUT;
+  var CLIPS          = window.SPIRO_AR.CLIPS;
+  var PATTERN_MARKER = window.SPIRO_AR.PATTERN_MARKER;
 
   var gate      = document.getElementById('gate');
   var loading   = document.getElementById('loading');
@@ -367,7 +333,16 @@ AFRAME.registerComponent('depth-bias', {
     v.src = clip.src;
     v.loop = true;
     v.muted = true;
-    v.preload = 'auto';
+    // Not "auto": with one clip per marker, eight of these would all download
+    // in full on page load — tens of megabytes over conference wifi before the
+    // viewer has pointed at anything. The body of each clip is fetched when its
+    // marker is first seen instead.
+    //
+    // "metadata" rather than "none" because we need videoWidth/videoHeight to
+    // shape the plane; with "none" every plane would start square and visibly
+    // snap on first play. The moov atom is at the front of the file (ffmpeg
+    // +faststart), so this costs a few KB per clip.
+    v.preload = 'metadata';
     // Property assignment doesn't cover these two; iOS needs both present
     // or it takes the video fullscreen instead of compositing it.
     v.setAttribute('playsinline', '');
@@ -378,7 +353,10 @@ AFRAME.registerComponent('depth-bias', {
     v.addEventListener('loadedmetadata', function () {
       if (!clip.aspect && v.videoWidth && v.videoHeight) {
         clip.aspect = v.videoWidth / v.videoHeight;
-        if (clip.key === current) layoutScreen();
+        // Any marker currently showing this clip is the wrong shape until now.
+        markers.forEach(function (m) {
+          if (m.current === clip.key) layoutScreen(m);
+        });
       }
     });
 
@@ -388,17 +366,32 @@ AFRAME.registerComponent('depth-bias', {
     if (i === 0) b.className = 'active';
     b.addEventListener('click', function (e) {
       e.stopPropagation();
-      switchTo(clip.key);
+      var sw = switcherMarker();
+      if (sw) switchTo(sw, clip.key);
     });
     switcher.appendChild(b);
     buttons[clip.key] = b;
   });
 
-  // Populated once the scene template is injected.
-  var scene = null, marker = null, screenEl = null, bezel = null;
+  // Every marker on the poster: the spiral plus one per clip that declares a
+  // barcode. Each record owns its own planes, its own current clip and its
+  // own visibility, so nothing here is a singleton any more.
+  var MARKERS = [
+    { key: PATTERN_MARKER.key, type: 'pattern', url: PATTERN_MARKER.url,
+      clips: (PATTERN_MARKER.clips || CLIPS.map(function (c) { return c.key; })),
+      switcher: true }
+  ].concat(
+    CLIPS.filter(function (c) { return typeof c.barcode === 'number'; })
+         .map(function (c) {
+           return { key: 'barcode-' + c.barcode, type: 'barcode',
+                    value: c.barcode, clips: [c.key], switcher: false };
+         })
+  );
 
-  var current = CLIPS[0].key;
-  var markerVisible = false;
+  // Populated once the scene template is injected.
+  var scene = null;
+  var markers = [];
+
   var DEBUG = /[?&]debug=1/.test(location.search);
 
   function show(el, visible) { el.classList.toggle('hidden', !visible); }
@@ -426,41 +419,89 @@ AFRAME.registerComponent('depth-bias', {
     return Promise.all(jobs);
   }
 
-  function activeVideo() { return byKey[current].el; }
-
-  function layoutScreen() {
-    if (!screenEl) return;
-    var clip = byKey[current];
-    var w = LAYOUT.width;
-    // Fall back to square until the file's real dimensions are known.
-    var h = w / (clip.aspect || 1);
-    screenEl.setAttribute('width', w);
-    screenEl.setAttribute('height', h);
-    bezel.setAttribute('width', w + LAYOUT.bezelPad);
-    bezel.setAttribute('height', h + LAYOUT.bezelPad);
+  function anyVisible() {
+    return markers.some(function (m) { return m.visible; });
   }
 
-  function switchTo(key) {
-    if (key === current || !byKey[key]) return;
+  // The marker whose clip the switcher buttons and tap-to-cycle control.
+  function switcherMarker() {
+    for (var i = 0; i < markers.length; i++) {
+      if (markers[i].visible && markers[i].switcher) return markers[i];
+    }
+    return null;
+  }
 
-    var previous = byKey[current].el;
-    if (previous) previous.pause();
+  function layoutScreen(m) {
+    if (!m || !m.screen) return;
+    var clip = byKey[m.current];
+    var w = LAYOUT.width;
+    // Fall back to square until the file's real dimensions are known.
+    var h = w / ((clip && clip.aspect) || 1);
+    m.screen.setAttribute('width', w);
+    m.screen.setAttribute('height', h);
+    m.bezel.setAttribute('width', w + LAYOUT.bezelPad);
+    m.bezel.setAttribute('height', h + LAYOUT.bezelPad);
+  }
 
-    current = key;
-    if (screenEl) screenEl.setAttribute('material', 'src', byKey[key].id);
-    layoutScreen();
-
-    Object.keys(buttons).forEach(function (k) {
-      buttons[k].classList.toggle('active', k === current);
+  // ── playback ───────────────────────────────────────────────────────────
+  // A clip plays iff at least one visible marker is showing it.
+  //
+  // This is derived from scratch every time rather than reference-counted on
+  // markerFound/markerLost. A counter drifts the moment an event is missed and
+  // there is no way to resync it, whereas a pure function of
+  // (visible markers x their current clip) cannot drift.
+  //
+  // It also has to be this way because clips are shared: the spiral marker can
+  // be showing 'flow' at the same time as barcode 0. Pausing on one marker's
+  // markerLost would then kill playback the other marker still needs.
+  function refreshPlayback() {
+    var wanted = Object.create(null);
+    markers.forEach(function (m) {
+      if (m.visible) wanted[m.current] = true;
     });
 
-    // Only resume if the marker is actually on screen; otherwise markerFound
-    // will start it.
-    if (markerVisible) {
-      var v = activeVideo();
-      v.currentTime = 0;
-      v.play().catch(function () {});
-    }
+    CLIPS.forEach(function (clip) {
+      var v = clip.el;
+      if (!v) return;
+      // Guarded so playback resumes where it left off rather than restarting,
+      // and so we don't pile up redundant play() promises every frame.
+      if (wanted[clip.key]) { if (v.paused) v.play().catch(function () {}); }
+      else if (!v.paused)   { v.pause(); }
+    });
+  }
+
+  // Overlay state is derived too, for the same reason: after looking at a
+  // barcode marker and back, a pushed "active" class would be lying about
+  // which clip the spiral is showing.
+  function refreshChrome() {
+    var sw = switcherMarker();
+    // Buttons that silently do nothing are worse than absent buttons, and a
+    // barcode marker has exactly one clip, so there is nothing to offer.
+    show(switcher, !!sw);
+    Object.keys(buttons).forEach(function (k) {
+      buttons[k].classList.toggle('active', !!sw && sw.current === k);
+    });
+    show(hint, !anyVisible());
+  }
+
+  function switchTo(m, key) {
+    if (!m || key === m.current || !byKey[key]) return;
+
+    var v = byKey[key].el;
+    // Pressing a switcher button restarts the clip — unless another visible
+    // marker is already showing it, where restarting would yank that marker's
+    // playback back to zero.
+    var shownElsewhere = markers.some(function (o) {
+      return o !== m && o.visible && o.current === key;
+    });
+
+    m.current = key;
+    m.screen.setAttribute('material', 'src', byKey[key].id);
+    layoutScreen(m);
+
+    if (v && !shownElsewhere && m.visible) v.currentTime = 0;
+    refreshPlayback();
+    refreshChrome();
   }
 
   // ── scene startup ──────────────────────────────────────────────────────
@@ -478,35 +519,46 @@ AFRAME.registerComponent('depth-bias', {
                                              'debugUIEnabled: true'));
     }
 
-    document.body.appendChild(frag);
-
-    scene    = document.querySelector('a-scene');
-    marker   = document.getElementById('marker');
-    screenEl = document.getElementById('screen');
-    bezel    = document.getElementById('bezel');
-
-    // Pausing when the marker leaves frame means a viewer who looks away and
-    // back resumes where they left off instead of missing content.
-    marker.addEventListener('markerFound', function () {
-      markerVisible = true;
-      show(hint, false);
-      activeVideo().play().catch(function () {});
+    // Markers are built into the cloned fragment, before it enters the
+    // document, so AR.js sees a complete scene at init and there is no
+    // ordering to reason about. Building into the fragment rather than the
+    // template also means a second startScene() (e.g. after a camera retry)
+    // can't duplicate them.
+    var sceneRoot = frag.querySelector('a-scene');
+    MARKERS.forEach(function (cfg) {
+      var m = buildMarker(cfg);
+      if (m) { sceneRoot.appendChild(m.el); markers.push(m); }
     });
 
-    marker.addEventListener('markerLost', function () {
-      markerVisible = false;
-      show(hint, true);
-      activeVideo().pause();
+    document.body.appendChild(frag);
+
+    scene = document.querySelector('a-scene');
+
+    markers.forEach(function (m) {
+      // Pausing when a marker leaves frame means a viewer who looks away and
+      // back resumes where they left off instead of missing content. Which
+      // clips actually play is decided by refreshPlayback, not here, because
+      // two markers can share one clip.
+      m.el.addEventListener('markerFound', function () {
+        m.visible = true;
+        refreshPlayback();
+        refreshChrome();
+      });
+      m.el.addEventListener('markerLost', function () {
+        m.visible = false;
+        refreshPlayback();
+        refreshChrome();
+      });
     });
 
     function ready() {
-      document.getElementById('screenRoot')
-        .setAttribute('position', { x: 0, y: 0.01, z: -LAYOUT.offsetAbove });
-      screenEl.setAttribute('material', 'src', byKey[current].id);
-      layoutScreen();
+      markers.forEach(function (m) {
+        m.screen.setAttribute('material', 'src', byKey[m.current].id);
+        layoutScreen(m);
+      });
       show(loading, false);
-      show(switcher, true);
       show(hint, true);
+      refreshChrome();
       initGestures();
     }
 
@@ -514,6 +566,75 @@ AFRAME.registerComponent('depth-bias', {
     else scene.addEventListener('loaded', ready);
 
     if (DEBUG) startDiagnostics();
+  }
+
+  // Build one <a-marker> and its planes. Returns a marker record, or null if
+  // the config entry is unusable — a bad entry is skipped with an error rather
+  // than thrown, so one typo can't cost the whole scene mid-conference.
+  function buildMarker(cfg) {
+    var clips = (cfg.clips || []).filter(function (k) { return !!byKey[k]; });
+    if (!clips.length) {
+      console.error('[marker ' + cfg.key + '] no valid clips, skipping', cfg.clips);
+      return null;
+    }
+
+    var el = document.createElement('a-marker');
+    el.id = 'marker-' + cfg.key;   // for devtools; nothing looks it up
+
+    if (cfg.type === 'barcode') {
+      if (!(cfg.value >= 0 && cfg.value <= 7 && cfg.value % 1 === 0)) {
+        console.error('[marker ' + cfg.key + '] barcode id must be an integer ' +
+                      '0-7 for 3x3_HAMMING63, got ' + cfg.value);
+        return null;
+      }
+      el.setAttribute('type', 'barcode');
+      // Maps to arjs-anchor.barcodeValue. Out-of-range ids are accepted
+      // silently by AR.js and simply never match, hence the check above.
+      el.setAttribute('value', String(cfg.value));
+    } else {
+      if (!cfg.url) {
+        console.error('[marker ' + cfg.key + '] pattern marker needs a url');
+        return null;
+      }
+      el.setAttribute('type', 'pattern');
+      el.setAttribute('url', cfg.url);
+    }
+
+    // These must be kebab-case. HTML attribute names are case-insensitive, and
+    // AR.js registers the a-marker primitive's mappings as "smooth-count" etc,
+    // so a camelCase "smoothCount" is silently ignored and the default is used
+    // instead — with no warning anywhere.
+    //
+    // Smoothing matters twice over here: it damps the few-degrees-per-frame
+    // pose jitter that is very obvious on a large video plane, and it means a
+    // single frame's misread barcode id never reaches the threshold to show.
+    el.setAttribute('smooth', 'true');
+    el.setAttribute('smooth-count', '10');
+    el.setAttribute('smooth-tolerance', '0.01');
+    el.setAttribute('smooth-threshold', '5');
+    // Deliberately no emitevents: it has no mapping in AR.js 3.4.7 and is
+    // inert. markerFound/markerLost fire unconditionally from arjs-anchor.
+
+    el.appendChild(
+      document.getElementById('screenTemplate').content.cloneNode(true));
+
+    var screenRoot = el.querySelector('.screenRoot');
+    screenRoot.setAttribute('position',
+      { x: 0, y: 0.01, z: -LAYOUT.offsetAbove });
+
+    return {
+      key:        cfg.key,
+      type:       cfg.type,
+      value:      cfg.value,
+      switcher:   !!cfg.switcher && clips.length > 1,
+      clips:      clips,
+      current:    clips[0],
+      visible:    false,
+      el:         el,
+      screenRoot: screenRoot,
+      bezel:      el.querySelector('.bezel'),
+      screen:     el.querySelector('.screen')
+    };
   }
 
   // ── touch gestures ─────────────────────────────────────────────────────
@@ -532,8 +653,14 @@ AFRAME.registerComponent('depth-bias', {
   }
 
   function applyZoom(save) {
-    var root = document.getElementById('screenRoot');
-    if (root) root.object3D.scale.set(zoom, zoom, zoom);
+    // One shared zoom for every marker: a pinch carries no indication of which
+    // marker it means, and a viewer sees one marker at a time and expects
+    // "bigger" to stick.
+    markers.forEach(function (m) {
+      if (m.screenRoot && m.screenRoot.object3D) {
+        m.screenRoot.object3D.scale.set(zoom, zoom, zoom);
+      }
+    });
     document.getElementById('resetZoom')
             .classList.toggle('hidden', Math.abs(zoom - 1) < 0.02);
     if (save) {
@@ -611,10 +738,13 @@ AFRAME.registerComponent('depth-bias', {
         return;
       }
 
+      // Cycles within the switcher marker's own clip list, so a tap while
+      // looking at a single-clip barcode marker correctly does nothing.
       var quick = performance.now() - downAt < 400;
-      if (pointers.size === 0 && quick && !moved && markerVisible) {
-        var i = CLIPS.findIndex(function (c) { return c.key === current; });
-        switchTo(CLIPS[(i + 1) % CLIPS.length].key);
+      var sw = switcherMarker();
+      if (pointers.size === 0 && quick && !moved && sw && sw.clips.length > 1) {
+        var i = sw.clips.indexOf(sw.current);
+        switchTo(sw, sw.clips[(i + 1) % sw.clips.length]);
       }
     }
     canvas.addEventListener('pointerup', release);
@@ -636,9 +766,14 @@ AFRAME.registerComponent('depth-bias', {
 
   // ── diagnostics (?debug=1) ─────────────────────────────────────────────
   var stats = {
-    found: 0, lastSeen: 0, frames: 0, fps: 0,
+    frames: 0, fps: 0,
     squares: 0, lastSquareAt: 0,
-    lastConfidence: 0, bestConfidence: 0, lastMatchAt: 0
+    patt:   { id: -1, cf: 0, best: 0, at: 0 },
+    matrix: { id: -1, cf: 0, best: 0, at: 0 },
+    unknown: 0,     // square found but decoded as neither -> ratio/family suspect
+    conflicts: 0,   // idPatt AND idMatrix both set: AR.js's pattern-biased
+                    // classifier may be swallowing a barcode (see README)
+    ids: {}         // idMatrix -> { n, at, best }
   };
 
   function arContext() {
@@ -659,11 +794,6 @@ AFRAME.registerComponent('depth-bias', {
   function startDiagnostics() {
     var panel = document.getElementById('debug');
     show(panel, true);
-
-    marker.addEventListener('markerFound', function () {
-      stats.found++;
-      stats.lastSeen = performance.now();
-    });
 
     var lastFrameTime = performance.now();
     setInterval(function () {
@@ -687,20 +817,68 @@ AFRAME.registerComponent('depth-bias', {
       }
 
       // This is the diagnostic that matters. ARToolKit works in two stages:
-      // find a black quadrilateral, then match its interior against the
-      // loaded pattern. Separating them tells you which half is failing —
-      // "no squares" is a lighting/contrast/geometry problem, whereas
-      // "squares but low confidence" points at the .patt, the patternRatio,
+      // find a black quadrilateral, then identify its interior. Separating
+      // them tells you which half is failing — "no squares" is a
+      // lighting/contrast/geometry problem, whereas "squares but nothing
+      // identified" points at the .patt, the patternRatio, the marker family,
       // or a marker too small or too oblique to resolve.
+      //
+      // With mono_and_matrix there are two identify paths, and they report on
+      // different fields: patterns carry cfPatt/idPatt, barcodes carry
+      // cfMatrix/idMatrix. ev.data.type says which (0 pattern, 1 barcode,
+      // -1 unknown). Reading cfPatt unconditionally, as this used to, silently
+      // mixes the two.
       if (ctrl.addEventListener) {
         ctrl.addEventListener('getMarker', function (ev) {
-          var m = ev && ev.data && ev.data.marker;
+          var d = ev && ev.data, m = d && d.marker;
           if (!m) return;
-          stats.lastConfidence = m.cfPatt;
-          stats.lastMatchAt = performance.now();
-          if (m.cfPatt > stats.bestConfidence) stats.bestConfidence = m.cfPatt;
+          // ev.data.marker is a single object that AR.js reassigns field by
+          // field for every square, so the scalars must be copied out here —
+          // stashing the object would give whatever the last square was.
+          var now = performance.now();
+
+          if (m.idPatt > -1 && m.idMatrix > -1) stats.conflicts++;
+
+          if (d.type === 0) {
+            stats.patt.id = m.idPatt;
+            stats.patt.cf = m.cfPatt;
+            stats.patt.at = now;
+            if (m.cfPatt > stats.patt.best) stats.patt.best = m.cfPatt;
+          } else if (d.type === 1) {
+            stats.matrix.id = m.idMatrix;
+            stats.matrix.cf = m.cfMatrix;
+            stats.matrix.at = now;
+            if (m.cfMatrix > stats.matrix.best) stats.matrix.best = m.cfMatrix;
+            var e = stats.ids[m.idMatrix] ||
+                    (stats.ids[m.idMatrix] = { n: 0, at: 0, best: 0 });
+            e.n++; e.at = now;
+            if (m.cfMatrix > e.best) e.best = m.cfMatrix;
+          } else if (d.type === -1) {
+            stats.unknown++;
+          }
         });
       }
+    }
+
+    // Prove the marker family actually took effect. AR.js looks matrixCodeType
+    // up in a table and, on a miss, console.asserts (which only logs) and then
+    // calls setMatrixCodeType(undefined) — so a mis-cased string like
+    // "3x3_hamming63" leaves barcode detection quietly dead. Reading the value
+    // back turns that into a visible red line instead of a mystery.
+    function codesRow(ctrl) {
+      if (!ctrl || !ctrl.getMatrixCodeType) return '<span class="bad">n/a</span>';
+      try {
+        var tk = ctrl.artoolkit || ctrl;
+        var want = tk.AR_MATRIX_CODE_3x3_HAMMING63;
+        var got = ctrl.getMatrixCodeType();
+        var ratio = ctrl.getPattRatio ? ctrl.getPattRatio() : null;
+        var ok = (want === undefined) ? null : (got === want);
+        return (ok === null
+                  ? '<span class="good">set (' + got + ')</span>'
+                  : ok ? '<span class="good">3x3_HAMMING63 OK</span>'
+                       : '<span class="bad">WRONG (' + got + ')</span>') +
+               (ratio !== null ? '  ratio ' + ratio.toFixed(2) : '');
+      } catch (e) { return '<span class="bad">n/a</span>'; }
     }
 
     function render() {
@@ -712,36 +890,57 @@ AFRAME.registerComponent('depth-bias', {
         if (n > 0) { stats.squares = n; stats.lastSquareAt = performance.now(); }
       }
 
-      var visible = marker && marker.object3D && marker.object3D.visible;
-      var pos = visible ? marker.object3D.position : null;
-      var dist = pos ? pos.length() : null;
-      var since = stats.lastSeen ? ((performance.now() - stats.lastSeen) / 1000) : null;
-
+      var now = performance.now();
       var camVid = document.querySelector('#arjs-video');
       var thr = ctrl && ctrl.getThreshold ? ctrl.getThreshold() : null;
+      var recent = function (t) { return t && (now - t) < 500; };
 
-      var squareRecent = stats.lastSquareAt &&
-                         (performance.now() - stats.lastSquareAt) < 500;
-      var conf = stats.lastConfidence;
-      var confRecent = stats.lastMatchAt &&
-                       (performance.now() - stats.lastMatchAt) < 500;
+      function stage(label, s, need) {
+        if (!recent(s.at)) {
+          return label + '<span class="bad">none</span>' +
+                 (s.best ? '  best ' + s.best.toFixed(2) : '') + '\n';
+        }
+        return label + 'id ' + s.id + '  ' +
+               '<span class="' + (s.cf >= need ? 'good' : 'bad') + '">' +
+               s.cf.toFixed(3) + '</span> (need ≥' + need.toFixed(2) + ')' +
+               (s.best ? '  best ' + s.best.toFixed(2) : '') + '\n';
+      }
+
+      // Which barcode ids decoded recently. With barcodes the question is not
+      // "did it work" but "did my printed square decode to the number I
+      // think" — a misread surfaces as a different id, not as a failure.
+      var idList = Object.keys(stats.ids)
+        .filter(function (k) { return recent(stats.ids[k].at); })
+        .map(function (k) { return k + '×' + stats.ids[k].n; })
+        .join('  ') || '—';
+
+      var markerRows = markers.map(function (m) {
+        var vis = m.el && m.el.object3D && m.el.object3D.visible;
+        var d = vis ? m.el.object3D.position.length() : null;
+        return '  ' + (m.key + '          ').slice(0, 11) +
+               (vis ? '<span class="good">FOUND</span>  ' +
+                      d.toFixed(2) + ' mw  ' + m.current
+                    : '<span style="opacity:.45">—</span>');
+      }).join('\n');
+
+      var playing = CLIPS.filter(function (c) { return c.el && !c.el.paused; })
+                         .map(function (c) { return c.key; }).join(' ') || '—';
 
       panel.innerHTML =
         '<b>AR diagnostics</b>\n' +
-        'marker     ' + (visible
-            ? '<span class="good">FOUND</span>'
-            : '<span class="bad">not detected</span>') + '\n' +
-        '1 squares  ' + (squareRecent
+        'codes      ' + codesRow(ctrl) + '\n' +
+        '1 squares  ' + (recent(stats.lastSquareAt)
             ? '<span class="good">' + stats.squares + ' seen</span>'
             : '<span class="bad">none — lighting/contrast</span>') + '\n' +
-        '2 pattern  ' + (confRecent
-            ? '<span class="' + (conf >= 0.6 ? 'good' : 'bad') + '">' +
-              conf.toFixed(3) + '</span> (need ≥0.60)'
-            : '<span class="bad">no match</span>') +
-            (stats.bestConfidence ? '  best ' + stats.bestConfidence.toFixed(2) : '') + '\n' +
-        'detections ' + stats.found +
-            (since !== null ? '   last ' + since.toFixed(1) + 's ago' : '') + '\n' +
-        'distance   ' + (dist !== null ? dist.toFixed(2) + ' marker-widths' : '—') + '\n' +
+        stage('2a pattern ', stats.patt, 0.6) +
+        stage('2b barcode ', stats.matrix, 0.6) +
+        '   ids     ' + idList + '\n' +
+        '   unknown ' + stats.unknown +
+            '   conflicts ' + (stats.conflicts
+              ? '<span class="bad">' + stats.conflicts + '</span>'
+              : '0') + '\n' +
+        '<b>markers</b>\n' + markerRows + '\n' +
+        'playing    ' + playing + '\n' +
         'render     ' + stats.fps + ' fps\n' +
         'camera     ' + (camVid && camVid.videoWidth
             ? camVid.videoWidth + '×' + camVid.videoHeight

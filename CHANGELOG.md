@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.6.0] — 2026-09-13
+
+### Added
+- **One marker per movie.** Barcode (matrix-code) markers from the
+  `3x3_HAMMING63` family run alongside the existing spiral pattern marker, via
+  AR.js's `detectionMode: mono_and_matrix`. Pointing at a barcode marker plays
+  exactly one clip; the spiral keeps showing all clips with the switcher. Up to
+  8 markers (ids 0-7). Verified that both modalities detect in the same
+  session, individually and with all three markers in one frame.
+- `tools/make_barcode_markers.py` generates all 8 markers with a white quiet
+  zone baked in, reusing the geometry and PNG writer from `make_marker.py` so
+  both families print at the same scale and share one `patternRatio`.
+  Generated rather than downloaded: the widely-linked collection declares no
+  licence, its images have no quiet zone, and the encoding is mechanical (three
+  fixed orientation cells, six data cells).
+- `tests/test_barcode_table.py` pins the bit patterns against the canonical
+  ARToolKit markers, and independently asserts the family's minimum pairwise
+  cell distance is 3. A wrong bit layout would decode to a *different valid
+  id* — the poster would play the wrong movie with no error anywhere.
+- `config.js`, shared by `index.html` and `print.html`, so adding a movie stays
+  a genuine one-line change and the printed markers cannot drift from what the
+  app looks for.
+- `print.html` gains a marker-per-movie sheet, generated from the same config,
+  each block labelled with its movie and barcode id. The QR block stays, and is
+  now explicitly marked as print-once — it is the page entry point, not a
+  tracking marker.
+- Diagnostics gained four rows for failure modes that were previously invisible:
+  `codes` (reads the marker family back out of AR.js), `ids` (which barcode ids
+  decoded — a misread shows up as a *different* id, not as a failure),
+  `unknown`, and `conflicts`. Plus a per-marker visibility table.
+
+### Changed
+- The single marker became N. Marker subtrees are cloned from a `<template>`
+  and built into the scene fragment before it enters the document; per-marker
+  state replaced the module-level `marker`/`screenEl`/`bezel`/`markerVisible`
+  singletons.
+- **Playback is now derived, not per-marker.** A clip plays iff at least one
+  visible marker is showing it, recomputed from scratch on every change. This
+  is required because clips are shared: the spiral can show `flow` while
+  barcode 0 also shows it, and the old `markerLost -> pause()` would have
+  killed playback the other marker still needed. Verified: losing the spiral
+  leaves the clip playing for barcode 0, without restarting it.
+- Switcher and tap-to-cycle are scoped to the spiral marker and hidden while
+  only a barcode marker is visible — a barcode marker has one clip, so buttons
+  would silently do nothing. Button highlight is now derived rather than
+  pushed, so it can't lie after looking at another marker.
+- Clips are `preload="metadata"` instead of `"auto"`. Eight clips at `auto`
+  would download in full on page load. `metadata` rather than `none` because
+  the plane needs `videoWidth`/`videoHeight` to be shaped correctly, and the
+  moov atom is at the front of the file already.
+- Pinch-zoom applies to every marker; gate and hint copy no longer say "the
+  spiral marker".
+- Dropped the inert `emitevents` attribute (no mapping exists in AR.js 3.4.7).
+
 ## [0.5.0] — 2026-09-10
 
 ### Added

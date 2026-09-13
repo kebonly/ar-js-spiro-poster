@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Poster callout &mdash; Spirochete AR</title>
 <script src="vendor/qrcode.js"></script>
+<script src="config.js"></script>
 <style>
   :root { --square-mm: 80; }
 
@@ -48,11 +49,41 @@
     color: #93a0b5; font-size: .85rem; text-align: center;
     margin: 0 auto 6px;
   }
-  #markerImg {
+  /* 1.3333 = 1200/900: the PNG includes a white quiet zone of 1/8 of the image
+     on each side, so the image prints wider than its black square. The
+     generated barcode markers deliberately share this geometry (both come
+     from tools/make_marker.py's constants), so one rule sizes both. */
+  #markerImg, .markerImg {
     width: calc(var(--square-mm) * 1.3333 * 1mm);
     display: block; margin: 0 auto;
     image-rendering: pixelated;
   }
+
+  /* ── barcode sheet ─────────────────────────────────────────────────────
+     One block per movie. Each is a complete callout: clearance above (the
+     video renders there), the marker, then the movie name below. */
+  .sheet-title {
+    font-size: 1.1rem; font-weight: 700; margin: 34px 0 4px;
+    page-break-before: always;
+  }
+  .barcodes {
+    display: flex; flex-wrap: wrap;
+    gap: calc(var(--square-mm) * 0.5 * 1mm);
+    justify-content: flex-start;
+  }
+  .bc { text-align: center; page-break-inside: avoid; }
+  .bc .caption {
+    margin-top: calc(var(--square-mm) * 0.06 * 1mm);
+    font-size: calc(var(--square-mm) * 0.06 * 1mm);
+    font-weight: 700;
+  }
+  .bc .code {
+    font-family: ui-monospace, Menlo, monospace;
+    font-weight: 400;
+    font-size: calc(var(--square-mm) * 0.04 * 1mm);
+    color: #5b6880;
+  }
+  .bc .missing { color: #b4483a; font-weight: 600; }
   .strip {
     display: flex; align-items: center; gap: calc(var(--square-mm) * 0.09 * 1mm);
     justify-content: center;
@@ -122,6 +153,9 @@
   </p>
 </div>
 
+<!-- ── Entry point: print this ONCE for the whole poster ────────────────
+     The QR is only how a viewer loads the page; it is not a tracking
+     marker, so it does not need repeating beside every figure. -->
 <div class="callout">
   <div class="clearance"><span>video appears here &mdash; keep clear</span></div>
   <img id="markerImg" src="assets/marker/spiro-marker.png" alt="AR marker">
@@ -132,12 +166,23 @@
       <ol>
         <li>Scan the code</li>
         <li>Tap &ldquo;Start camera&rdquo;</li>
-        <li>Point it at the square above</li>
+        <li>Point it at any marker</li>
       </ol>
       <div class="url" id="urlEcho"></div>
     </div>
   </div>
 </div>
+
+<!-- ── One marker per movie ─────────────────────────────────────────────
+     Generated from the same CLIPS list as index.html, so this sheet can
+     never drift out of sync with what the app actually looks for. -->
+<h2 class="sheet-title">One marker per movie</h2>
+<p class="noprint" style="margin:0 0 18px; color:#5b6880; font-size:.93rem">
+  Put each of these beside the figure it belongs to. Keep the white margin and
+  leave the dashed area above each one clear &mdash; that is where its video
+  appears. These need no QR of their own.
+</p>
+<div class="barcodes" id="barcodes"></div>
 
 </div>
 
@@ -172,12 +217,43 @@
     return n;
   }
 
+  // One printable block per movie that declares a barcode, built from the
+  // shared CLIPS list so this sheet always matches what index.html looks for.
+  function renderBarcodes() {
+    var host = document.getElementById('barcodes');
+    var withCodes = window.SPIRO_AR.CLIPS.filter(function (c) {
+      return typeof c.barcode === 'number';
+    });
+
+    if (!withCodes.length) {
+      host.innerHTML = '<p style="color:#5b6880">No movies have a ' +
+                       '<code>barcode</code> id yet — add one in config.js.</p>';
+      return;
+    }
+
+    host.innerHTML = withCodes.map(function (c) {
+      var src = 'assets/marker/barcode/barcode-' + c.barcode + '.png';
+      return '' +
+        '<div class="bc">' +
+          '<div class="clearance"><span>video appears here<br>&mdash; keep clear</span></div>' +
+          '<img class="markerImg" src="' + src + '" alt="barcode ' + c.barcode + '"' +
+               ' onerror="this.insertAdjacentHTML(\'afterend\',' +
+               ' \'&lt;div class=&quot;missing&quot;&gt;missing ' + src +
+               ' — run tools/make_barcode_markers.py&lt;/div&gt;\'); this.remove();">' +
+          '<div class="caption">' + c.label +
+            '<div class="code">barcode ' + c.barcode + '</div>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
   function update() {
     var mm = Math.max(10, Number(sizeInput.value) || 80);
+    var L = window.SPIRO_AR.LAYOUT;
     document.documentElement.style.setProperty('--square-mm', mm);
     document.getElementById('echo').textContent = mm;
-    document.getElementById('videoMM').textContent = Math.round(mm * 2.4);
-    document.getElementById('offsetMM').textContent = Math.round(mm * 1.8);
+    document.getElementById('videoMM').textContent = Math.round(mm * L.width);
+    document.getElementById('offsetMM').textContent = Math.round(mm * L.offsetAbove);
 
     var url = urlInput.value.trim() || 'https://example.com';
     document.getElementById('urlEcho').textContent = url.replace(/^https?:\/\//, '');
@@ -188,6 +264,7 @@
     el.addEventListener('input', update);
     el.addEventListener('change', update);
   });
+  renderBarcodes();
   update();
 </script>
 </body>

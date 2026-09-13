@@ -7,14 +7,37 @@ recordings play in place, anchored to the paper. No app install — it runs in
 the mobile browser.
 
 ```
-index.html          the AR experience
-marker.html         printable marker, with a scale control
-assets/marker/      spiro.patt (tracking descriptor) + spiro-marker.png
-assets/video/       web-optimised MP4s that get served
-vendor/             A-Frame 1.3.0 + AR.js 3.4.7, vendored deliberately
-tools/              marker generator, video transcoder, HTTPS dev server
-source-video/       original .mov masters (git-ignored)
+config.js              the movie list and layout — the one file to edit
+index.html             the AR experience
+print.html             poster callout + one printable marker per movie
+marker.html            the spiral marker on its own, with a scale control
+assets/marker/         spiro.patt (tracking descriptor) + spiro-marker.png
+assets/marker/barcode/ barcode-0.png … barcode-7.png (generated)
+assets/video/          web-optimised MP4s that get served
+vendor/                A-Frame 1.3.0 + AR.js 3.4.7 + qrcode-generator
+tools/                 marker generators, video transcoder, HTTPS dev server
+tests/                 encoding checks for both marker families
+source-video/          original .mov masters (git-ignored)
 ```
+
+## How the markers work
+
+There are two kinds of marker on the poster, and they do different jobs:
+
+| | Spiral marker | Barcode markers |
+|---|---|---|
+| Kind | pattern (`spiro.patt`) | matrix code, `3x3_HAMMING63` |
+| Shows | all clips, with a switcher | exactly one clip each |
+| How many | one | up to 8 (ids 0–7) |
+| Needs a `.patt` | yes | no — the id is read straight off the grid |
+
+Both run at once via AR.js's `detectionMode: mono_and_matrix`, and both use the
+same `patternRatio: 0.5` (a 25% black border each side), which is why a single
+global setting serves them.
+
+**The QR code is not a marker.** It is only how a viewer loads the page, so it
+goes on the poster **once** — not beside every figure. Barcode markers are what
+each figure gets.
 
 ## Running it locally
 
@@ -141,24 +164,50 @@ in one state machine, so a pinch can't also register as a tap.
 
 ## Adding another movie
 
-Drop the `.mp4` in `assets/video/` and add **one entry** to `CLIPS`, directly
-below `LAYOUT`:
+Drop the `.mp4` in `assets/video/` and add **one entry** to `CLIPS` in
+[`config.js`](config.js):
 
 ```js
 var CLIPS = [
-  { key: 'cluster', label: 'Cluster',
+  { key: 'cluster', label: 'Cluster', barcode: 1,
     src: 'assets/video/spiro-cluster.mp4' },
-  { key: 'flow',    label: 'Flow',
+  { key: 'flow',    label: 'Flow',    barcode: 0,
     src: 'assets/video/spiro-flow-visualization.mp4' },
-  { key: 'motility', label: 'Motility',           // <- new
+  { key: 'motility', label: 'Motility', barcode: 2,        // <- new
     src: 'assets/video/spiro-motility.mp4' }
 ];
 ```
 
-That's the whole change. The `<video>` element, the switcher button, the
-gesture-unlock list and the tap-to-cycle order are all generated from this
-list, and the aspect ratio is read from the file itself — so nothing has to
-be kept in sync by hand.
+That's the whole change. Generated from this one list: the `<video>` element,
+its **barcode marker**, the switcher button, the iOS gesture-unlock list, the
+tap-to-cycle order, and the printable marker sheet in `print.html`. The aspect
+ratio is read from the file itself. Nothing has to be kept in sync by hand —
+which is why `config.js` is shared by both pages rather than duplicated.
+
+`barcode` is what gives a movie its own marker. Valid ids are **0–7**; print
+the matching `assets/marker/barcode/barcode-<id>.png` from `print.html`. Omit
+`barcode` and the movie is still reachable through the spiral marker's
+switcher, just without a marker of its own.
+
+Encode new clips the same way as the others so they behave on mobile:
+
+```bash
+ffmpeg -i input.mov -an \
+  -vf "scale=720:-2:flags=lanczos,fps=30,format=yuv420p" \
+  -c:v libx264 -profile:v main -level 3.1 \
+  -crf 26 -maxrate 1400k -bufsize 2800k -preset slow -g 60 \
+  -movflags +faststart \
+  assets/video/spiro-motility.mp4
+```
+
+Two things worth knowing:
+
+- **Keep them silent** (`-an`) unless you need audio. Muted video is what lets
+  iOS autoplay into a WebGL texture without a fight.
+- **Budget the payload.** Clips are `preload="metadata"`, so only a few KB of
+  header is fetched per clip up front and the body loads when its marker is
+  first seen. Even so, aim for ≤2 MB per clip: eight of them is what a viewer
+  may end up pulling over conference wifi.
 
 Encode the new clip the same way as the others so it behaves on mobile:
 
@@ -199,9 +248,33 @@ The panel splits detection into its two real stages, because they fail for
 completely different reasons:
 
 ```
-1 squares  1 seen          <- found a black quadrilateral
-2 pattern  0.992 (need ≥0.60)  <- matched its interior to spiro.patt
+codes      3x3_HAMMING63 OK  ratio 0.50   <- the marker family took effect
+1 squares  3 seen                         <- found 3 black quadrilaterals
+2a pattern id 0  0.980 (need ≥0.60)       <- one matched spiro.patt
+2b barcode id 1  1.000 (need ≥0.60)       <- one decoded as barcode 1
+   ids     0×111  1×111                   <- which ids decoded recently
+   unknown 0   conflicts 0
+markers
+  spiral     FOUND  5.64 mw  cluster
+  barcode-1  FOUND  6.44 mw  cluster
+  barcode-0  FOUND  6.79 mw  flow
+playing    cluster flow
 ```
+
+Four of those rows exist for specific failure modes:
+
+- **`codes`** reads the marker family back out of AR.js. If `matrixCodeType`
+  is mis-cased, AR.js logs a `console.assert` (which does nothing) and then
+  calls `setMatrixCodeType(undefined)`, leaving barcode detection quietly
+  dead. This row turns that into a visible red line.
+- **`ids`** is the row that matters for barcodes. A misread doesn't fail — it
+  decodes as a *different id*. This tells you whether your printed square
+  really is the number you think it is.
+- **`unknown`** counts squares that decoded as neither: the signature of a
+  wrong `patternRatio`, or a barcode outside the configured family.
+- **`conflicts`** counts squares where both a pattern id and a matrix id were
+  found. AR.js resolves those in favour of the pattern, so a non-zero number
+  here means a barcode marker may be getting swallowed.
 
 **If stage 1 says `none`** — ARToolKit can't even find a black square. This is
 almost always physical, not code:
@@ -236,6 +309,38 @@ marker-widths), the pose is fine and the video plane is simply out of frame.
 It sits 1.8 marker-widths *above* the marker, so at close range it's off the
 top of the screen. Back away.
 
+**If a barcode marker isn't recognised**, work down this list:
+
+1. Is `codes` green? If not, `matrixCodeType` is wrong and no barcode will ever
+   decode.
+2. Does `ids` show anything at all? If squares are seen but no ids decode, the
+   marker is probably too small in frame — a 3×3 grid needs less resolution
+   than a 16×16 pattern, but it still needs the cells distinguishable.
+3. Does `ids` show the *wrong* number? Then the printed marker isn't the one
+   you think. Re-print from `print.html`, which is generated from the same
+   config the app reads.
+4. Is `conflicts` climbing? A pattern marker in the same frame may be winning
+   the classification. Try framing the barcode alone.
+
+### Regenerating the barcode markers
+
+```bash
+python3 tools/make_barcode_markers.py
+python3 tests/test_barcode_table.py
+```
+
+The generator writes all 8 markers and self-checks them; the test pins the bit
+patterns against the canonical ARToolKit markers. That test exists because the
+failure mode is nasty — a wrong bit layout produces a marker that decodes to a
+*different valid id*, so the poster plays the wrong movie with no error
+anywhere.
+
+The markers are generated rather than downloaded for two reasons: the
+widely-linked collection they come from declares no licence, and its images
+have no white quiet zone (they are black to the corners), which invites
+cropping them flush and breaking detection. Ours bake the quiet zone in, using
+the same geometry as the spiral marker so one print rule sizes both.
+
 ### Things that bit us here
 
 - **A black `<body>` background hides the camera feed entirely** — feed flashes
@@ -248,6 +353,16 @@ top of the screen. Back away.
   detects the marker but reports the wrong rotation at 90°/270°, which a
   wall-mounted poster would never reveal.
   `tests/test_patt_encoding.py` pins this against AR.js's own `patt.hiro`.
+- **`matrixCodeType` is case-sensitive and fails silently.** It must be
+  `3x3_HAMMING63` — not `3x3_hamming_6_3` (the folder name the markers come
+  from) and not `3x3_parity65`. A miss logs a `console.assert` and disables
+  barcode detection with no other symptom. The `codes` row in `?debug=1`
+  exists to catch it.
+- **Two markers swapping into the same screen pixels can latch.** ARToolKit
+  tracks squares frame to frame, so a square already identified as the pattern
+  marker keeps that identity if a different marker appears in exactly the same
+  place. Real panning breaks the continuity and it resolves; it only showed up
+  in synthetic testing where one marker was teleported onto another.
 
 ## Regenerating assets
 

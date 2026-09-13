@@ -7,4 +7,12 @@
 # the site; assets/video/*.mp4 is what actually gets served. Keep your own
 # backup of these. Remove this line if you'd rather version them.
 source-video/
+
+# Reference marker files fetched by the tests for comparison only. Deliberately
+# not committed: patt.hiro belongs to AR.js, and the barcode images come from a
+# collection that declares no licence — which is why we generate our own.
 tests/patt.hiro
+tests/barcode-reference/
+
+__pycache__/
+*.pyc
