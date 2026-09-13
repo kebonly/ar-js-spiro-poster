@@ -72,6 +72,21 @@
     justify-content: flex-start;
   }
   .bc { text-align: center; page-break-inside: avoid; }
+
+  /* A barcode marker's video is centred ON the marker, not above it, so the
+     clear space it needs is a halo all round rather than a box overhead. */
+  .bc .halo {
+    width:  calc(var(--square-mm) * 2.56 * 1mm);
+    height: calc(var(--square-mm) * 2.56 * 1mm);
+    border: 1.5px dashed #b9c3d4;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto; position: relative;
+  }
+  .bc .halo-note {
+    position: absolute; top: 5px; left: 0; right: 0;
+    font-size: .78rem; color: #93a0b5;
+  }
   .bc .caption {
     margin-top: calc(var(--square-mm) * 0.06 * 1mm);
     font-size: calc(var(--square-mm) * 0.06 * 1mm);
@@ -147,9 +162,11 @@
     size relative to your poster.
   </div>
   <p style="margin:14px 0 0; font-size:.9rem; color:#5b6880">
-    Video renders about <strong><span id="videoMM">192</span>&nbsp;mm</strong>
-    wide, centred <strong><span id="offsetMM">144</span>&nbsp;mm</strong> above
-    the marker.
+    On the <strong>spiral</strong> marker the video renders about
+    <strong><span id="videoMM">192</span>&nbsp;mm</strong> wide, centred
+    <strong><span id="offsetMM">144</span>&nbsp;mm</strong> above it. On a
+    <strong>barcode</strong> marker it is the same size but centred
+    <em>on</em> the marker &mdash; see the sheet below.
   </p>
 </div>
 
@@ -178,9 +195,13 @@
      never drift out of sync with what the app actually looks for. -->
 <h2 class="sheet-title">One marker per movie</h2>
 <p class="noprint" style="margin:0 0 18px; color:#5b6880; font-size:.93rem">
-  Put each of these beside the figure it belongs to. Keep the white margin and
-  leave the dashed area above each one clear &mdash; that is where its video
-  appears. These need no QR of their own.
+  Put each of these beside the figure it belongs to. Unlike the spiral marker
+  above, a barcode marker's video appears <strong>centred on the marker
+  itself</strong>, so the clear space it needs is the dashed halo all round
+  &mdash; roughly <span id="haloMM">205</span>&nbsp;mm square. Keep the white
+  margin, and don't worry about the video covering the marker: tracking reads
+  the real camera image, not what's drawn over it. These need no QR of their
+  own.
 </p>
 <div class="barcodes" id="barcodes"></div>
 
@@ -235,11 +256,13 @@
       var src = 'assets/marker/barcode/barcode-' + c.barcode + '.png';
       return '' +
         '<div class="bc">' +
-          '<div class="clearance"><span>video appears here<br>&mdash; keep clear</span></div>' +
-          '<img class="markerImg" src="' + src + '" alt="barcode ' + c.barcode + '"' +
-               ' onerror="this.insertAdjacentHTML(\'afterend\',' +
-               ' \'&lt;div class=&quot;missing&quot;&gt;missing ' + src +
-               ' — run tools/make_barcode_markers.py&lt;/div&gt;\'); this.remove();">' +
+          '<div class="halo">' +
+            '<span class="halo-note">video fills this area</span>' +
+            '<img class="markerImg" src="' + src + '" alt="barcode ' + c.barcode + '"' +
+                 ' onerror="this.insertAdjacentHTML(\'afterend\',' +
+                 ' \'&lt;div class=&quot;missing&quot;&gt;missing ' + src +
+                 ' — run tools/make_barcode_markers.py&lt;/div&gt;\'); this.remove();">' +
+          '</div>' +
           '<div class="caption">' + c.label +
             '<div class="code">barcode ' + c.barcode + '</div>' +
           '</div>' +
@@ -254,6 +277,8 @@
     document.getElementById('echo').textContent = mm;
     document.getElementById('videoMM').textContent = Math.round(mm * L.width);
     document.getElementById('offsetMM').textContent = Math.round(mm * L.offsetAbove);
+    var halo = document.getElementById('haloMM');
+    if (halo) halo.textContent = Math.round(mm * (L.width + L.bezelPad));
 
     var url = urlInput.value.trim() || 'https://example.com';
     document.getElementById('urlEcho').textContent = url.replace(/^https?:\/\//, '');

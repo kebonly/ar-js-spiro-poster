@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.6.1] — 2026-09-13
+
+### Fixed
+- **No video appeared over any marker.** Markers tracked correctly and the
+  "point at a marker" hint disappeared, but nothing rendered.
+
+  `buildMarker` set the screenRoot position with an object,
+  `setAttribute('position', {x: 0, y: 0.01, z: -offset})`, and it runs *before*
+  the marker is in the document. A-Frame stringifies an object value on an
+  uninitialised entity to `"[object Object]"`, parses that back as `NaN NaN`,
+  and defaults the missing third component to 0. A NaN transform silently stops
+  the entire subtree rendering — while the marker still tracks and markerFound
+  still fires, which is exactly what makes it look like a marker that works but
+  shows nothing.
+
+  Introduced in 0.6.0: before that refactor the position was set in `ready()`,
+  after the scene was live, where the object form parses fine. Now passed as a
+  string, which is safe either way.
+
+  This was not caught earlier because 0.6.0 was verified by reading state
+  programmatically — `playing`, marker visibility, `cfMatrix` — and never by
+  looking at a rendered frame. The one screenshot that would have shown it was
+  misread as a cropped preview pane.
+
+### Changed
+- A barcode marker's video is now centred **on** its marker
+  (`BARCODE_LAYOUT.offsetAbove = 0`) rather than 1.8 marker-widths above it.
+  The old offset suits the spiral marker, which has dedicated clear space above
+  it on the poster; a barcode marker sits beside a figure with no such space,
+  and at any normal phone distance 1.8 widths up is off the top of the screen.
+  Tracking is unaffected by the video covering the marker — detection runs on
+  the raw camera image, not on what we draw over it.
+- Layout is now per-marker: `LAYOUT` is the base, `BARCODE_LAYOUT` overrides it
+  for barcode markers, and an optional per-clip `layout` overrides again.
+- `print.html` shows barcode markers with a dashed halo *around* the marker
+  (~205mm at an 80mm marker) instead of a clearance box above it, matching
+  where the video now appears. The spiral keeps its clearance-above box.
+
 ## [0.6.0] — 2026-09-13
 
 ### Added

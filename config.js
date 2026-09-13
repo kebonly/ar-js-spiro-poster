@@ -22,6 +22,19 @@ window.SPIRO_AR = (function () {
     bezelPad:    0.16    // border visible around the video
   };
 
+  // Overrides merged over LAYOUT for the barcode markers only.
+  //
+  // offsetAbove 0 puts the video directly over its marker rather than floating
+  // above it. The 1.8 default suits the spiral marker, which has a dedicated
+  // clear area above it on the poster — but a barcode marker sits beside a
+  // figure with no such space, and 1.8 widths up is off the top of the screen
+  // at any normal phone distance. The marker itself stays perfectly readable
+  // underneath: detection runs on the raw camera image, not on what we draw
+  // over it, so covering the marker on screen does not affect tracking.
+  var BARCODE_LAYOUT = {
+    offsetAbove: 0
+  };
+
   // ── The movies ────────────────────────────────────────────────────────
   //
   // To add one: drop the .mp4 in assets/video/ and add a line here. The
@@ -36,6 +49,9 @@ window.SPIRO_AR = (function () {
   //
   // "aspect" is optional — it is read from the file's own dimensions once
   // metadata loads. Set it only to force a different shape.
+  //
+  // "layout" is optional too: a per-movie override of LAYOUT/BARCODE_LAYOUT,
+  // e.g. layout: { width: 1.6 } for a movie that needs a smaller plane.
   var CLIPS = [
     { key: 'cluster', label: 'Cluster', barcode: 1,
       src: 'assets/video/spiro-cluster.mp4' },
@@ -52,5 +68,10 @@ window.SPIRO_AR = (function () {
   // "all of them", so adding a movie above needs no edit here.
   var PATTERN_MARKER = { key: 'spiral', url: 'assets/marker/spiro.patt' };
 
-  return { LAYOUT: LAYOUT, CLIPS: CLIPS, PATTERN_MARKER: PATTERN_MARKER };
+  return {
+    LAYOUT: LAYOUT,
+    BARCODE_LAYOUT: BARCODE_LAYOUT,
+    CLIPS: CLIPS,
+    PATTERN_MARKER: PATTERN_MARKER
+  };
 })();

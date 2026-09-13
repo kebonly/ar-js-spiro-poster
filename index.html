@@ -309,8 +309,18 @@ AFRAME.registerComponent('depth-bias', {
   // Configuration lives in config.js, shared with print.html so the printed
   // markers can never drift from what this page actually looks for.
   var LAYOUT         = window.SPIRO_AR.LAYOUT;
+  var BARCODE_LAYOUT = window.SPIRO_AR.BARCODE_LAYOUT || {};
   var CLIPS          = window.SPIRO_AR.CLIPS;
   var PATTERN_MARKER = window.SPIRO_AR.PATTERN_MARKER;
+
+  function merge() {
+    var out = {};
+    for (var i = 0; i < arguments.length; i++) {
+      var src = arguments[i] || {};
+      for (var k in src) if (src.hasOwnProperty(k)) out[k] = src[k];
+    }
+    return out;
+  }
 
   var gate      = document.getElementById('gate');
   var loading   = document.getElementById('loading');
@@ -379,12 +389,16 @@ AFRAME.registerComponent('depth-bias', {
   var MARKERS = [
     { key: PATTERN_MARKER.key, type: 'pattern', url: PATTERN_MARKER.url,
       clips: (PATTERN_MARKER.clips || CLIPS.map(function (c) { return c.key; })),
-      switcher: true }
+      switcher: true,
+      layout: merge(LAYOUT, PATTERN_MARKER.layout) }
   ].concat(
     CLIPS.filter(function (c) { return typeof c.barcode === 'number'; })
          .map(function (c) {
            return { key: 'barcode-' + c.barcode, type: 'barcode',
-                    value: c.barcode, clips: [c.key], switcher: false };
+                    value: c.barcode, clips: [c.key], switcher: false,
+                    // BARCODE_LAYOUT centres the video on the marker; a
+                    // per-clip layout can override that again.
+                    layout: merge(LAYOUT, BARCODE_LAYOUT, c.layout) };
          })
   );
 
@@ -434,13 +448,13 @@ AFRAME.registerComponent('depth-bias', {
   function layoutScreen(m) {
     if (!m || !m.screen) return;
     var clip = byKey[m.current];
-    var w = LAYOUT.width;
+    var w = m.layout.width;
     // Fall back to square until the file's real dimensions are known.
     var h = w / ((clip && clip.aspect) || 1);
     m.screen.setAttribute('width', w);
     m.screen.setAttribute('height', h);
-    m.bezel.setAttribute('width', w + LAYOUT.bezelPad);
-    m.bezel.setAttribute('height', h + LAYOUT.bezelPad);
+    m.bezel.setAttribute('width', w + m.layout.bezelPad);
+    m.bezel.setAttribute('height', h + m.layout.bezelPad);
   }
 
   // ── playback ───────────────────────────────────────────────────────────
@@ -618,9 +632,20 @@ AFRAME.registerComponent('depth-bias', {
     el.appendChild(
       document.getElementById('screenTemplate').content.cloneNode(true));
 
+    var layout = merge(LAYOUT, cfg.layout);
     var screenRoot = el.querySelector('.screenRoot');
+    // y lifts the planes a hair off the paper; -z moves them up the poster.
+    // offsetAbove 0 leaves the video sitting directly over its marker.
+    //
+    // Must be a STRING, not {x, y, z}. This runs before the marker is in the
+    // document, and A-Frame stringifies an object value on an uninitialised
+    // entity to "[object Object]", which parses back as NaN NaN with the
+    // missing third component defaulted to 0. A NaN transform silently stops
+    // the whole subtree rendering — the marker still tracks and markerFound
+    // still fires, so it looks exactly like a marker that works but shows
+    // nothing.
     screenRoot.setAttribute('position',
-      { x: 0, y: 0.01, z: -LAYOUT.offsetAbove });
+      '0 0.01 ' + (-layout.offsetAbove));
 
     return {
       key:        cfg.key,
@@ -630,6 +655,7 @@ AFRAME.registerComponent('depth-bias', {
       clips:      clips,
       current:    clips[0],
       visible:    false,
+      layout:     layout,
       el:         el,
       screenRoot: screenRoot,
       bezel:      el.querySelector('.bezel'),
