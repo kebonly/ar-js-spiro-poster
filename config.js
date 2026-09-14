@@ -14,10 +14,10 @@ window.SPIRO_AR = (function () {
   // it, in proportion.
   //
   // At an 80mm marker:
-  //   width 4.0       -> video renders ~320mm wide
+  //   width 6.0       -> video renders ~480mm wide
   //   offsetAbove 1.8 -> centred ~144mm above the marker
   var LAYOUT = {
-    width:       4.0,    // video width
+    width:       6.0,    // video width
     offsetAbove: 1.8,    // height of the video's centre above the marker
     bezelPad:    0.16    // border visible around the video
   };

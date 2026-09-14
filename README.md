@@ -88,7 +88,7 @@ renders 1.8 marker-widths above it, so anything placed above gets covered. A
 **barcode** marker's video is centred *on* the marker instead, so its dashed
 box is a halo all round rather than a box overhead.
 
-At an 80 mm marker the video renders about **320 mm** wide (`width: 4.0`), and
+At an 80 mm marker the video renders about **480 mm** wide (`width: 6.0`), and
 the QR is ~50 mm (1.2 mm per module, comfortable to scan at arm's length).
 
 The dashed area is what the video **covers on screen**, not something that must
@@ -122,7 +122,7 @@ top of [`config.js`](config.js):
 
 ```js
 var LAYOUT = {
-  width:       4.0,    // video width
+  width:       6.0,    // video width
   offsetAbove: 1.8,    // height of the video's centre above the marker
   bezelPad:    0.16    // border visible around the video
 };
@@ -137,10 +137,10 @@ At the default 80 mm marker:
 
 | Setting | Value | On the poster |
 |---|---|---|
-| `width: 4.0` | 4.0 × 80 mm | video ~320 mm wide |
+| `width: 6.0` | 6.0 × 80 mm | video ~480 mm wide |
 | `offsetAbove: 1.8` | 1.8 × 80 mm | centre ~144 mm above the marker (spiral only; barcode markers use 0) |
 
-So to make the video half as big, set `width: 2.0`. To sit it closer to the
+So to make the video half as big, set `width: 3.0`. To sit it closer to the
 marker, lower `offsetAbove`. Only the height is derived — it comes from each
 clip's own aspect ratio, so the video is never stretched.
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.2] — 2026-09-13
+
+### Changed
+- `LAYOUT.width` 4.0 -> 6.0. At an 80mm marker the video is now ~480mm wide.
+  Pinch range still untouched at 0.4x-3.0x (an effective 2.4-18.0
+  marker-widths). The print sheet's halo and clearance follow automatically,
+  since 0.7.1 made them derive from `LAYOUT`.
+- Opening screen title is now "Club Spiro" (was "Spirochete motility in AR").
+
 ## [0.7.1] — 2026-09-13
 
 ### Changed
