@@ -189,25 +189,29 @@ the matching `assets/marker/barcode/barcode-<id>.png` from `print.html`. Omit
 `barcode` and the movie is still reachable through the spiral marker's
 switcher, just without a marker of its own.
 
-Encode new clips the same way as the others so they behave on mobile:
+**Always run new clips through the transcoder.** Drop the original in
+`source-video/` and run:
 
 ```bash
-ffmpeg -i input.mov -an \
-  -vf "scale=720:-2:flags=lanczos,fps=30,format=yuv420p" \
-  -c:v libx264 -profile:v main -level 3.1 \
-  -crf 26 -maxrate 1400k -bufsize 2800k -preset slow -g 60 \
-  -movflags +faststart \
-  assets/video/spiro-motility.mp4
+./tools/transcode.sh          # everything in source-video/
+python3 tests/test_config.py  # checks the mapping and the encodes
 ```
 
-Two things worth knowing:
+Do not point `config.js` at a video straight out of your imaging software.
+Four properties matter, and three of them fail in ways you cannot diagnose
+from the phone:
 
-- **Keep them silent** (`-an`) unless you need audio. Muted video is what lets
-  iOS autoplay into a WebGL texture without a fight.
-- **Budget the payload.** Clips are `preload="metadata"`, so only a few KB of
-  header is fetched per clip up front and the body loads when its marker is
-  first seen. Even so, aim for ≤2 MB per clip: eight of them is what a viewer
-  may end up pulling over conference wifi.
+| | Why |
+|---|---|
+| `yuv420p` | iOS/Android H.264 decoders are 4:2:0 only. A `yuv444p` file plays fine on your laptop and **refuses to play on iPhone**. |
+| `+faststart` | Puts the moov atom at the front. Without it the browser downloads nearly the whole file just to read the dimensions, which defeats `preload="metadata"` and the lazy per-marker loading entirely. |
+| no audio | Muted video is what lets iOS autoplay into a WebGL texture. |
+| ≤720 px | These are textures a few cm across. A 3024 px source costs 21 MB of GPU memory to show at that size. |
+
+`tests/test_config.py` checks all of this, plus duplicate/out-of-range barcode
+ids and missing files. Run it after editing `config.js` — a hand-edited entry
+missing its closing `},` makes the whole file unparseable, and the page then
+dies on load rather than degrading.
 
 Encode the new clip the same way as the others so it behaves on mobile:
 

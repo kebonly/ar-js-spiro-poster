@@ -53,6 +53,18 @@ window.SPIRO_AR = (function () {
   // "layout" is optional too: a per-movie override of LAYOUT/BARCODE_LAYOUT,
   // e.g. layout: { width: 1.6 } for a movie that needs a smaller plane.
   var CLIPS = [
+    { key: 'agency',  label: 'Agency',  barcode: 7,
+      src: 'assets/video/spiro-agency.mp4' },
+    { key: 'density', label: 'Density', barcode: 6,
+      src: 'assets/video/density_vs_time.mp4' },
+    { key: 'morphology', label: 'Morphology', barcode: 5,
+      src: 'assets/video/spiro-morphology.mp4' },
+    { key: 'napari',  label: 'Napari',  barcode: 4,
+      src: 'assets/video/spiro-napari.mp4' },
+    { key: 'faraday', label: 'Faraday', barcode: 3,
+      src: 'assets/video/spiro-faraday.mp4' },
+    { key: 'couette', label: 'Couette', barcode: 2,
+      src: 'assets/video/spiro-couette.mp4' },
     { key: 'cluster', label: 'Cluster', barcode: 1,
       src: 'assets/video/spiro-cluster.mp4' },
     { key: 'flow',    label: 'Flow',    barcode: 0,

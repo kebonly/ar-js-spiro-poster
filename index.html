@@ -61,18 +61,23 @@
   }
   button:active { transform: scale(.97); }
 
-  /* Bottom switcher, shown only once the experience is running. */
+  /* Bottom switcher, shown only while the spiral marker is visible.
+     Wraps: this was a single row of 2-3 buttons, but there is one button per
+     movie, and eight of them overflow a phone screen in both directions —
+     leaving most of them unreachable with no indication they exist. */
   #switcher {
     position: fixed; z-index: 10;
     left: 0; right: 0;
     bottom: calc(18px + env(safe-area-inset-bottom));
-    display: flex; gap: 10px; justify-content: center;
-    padding: 0 16px;
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    padding: 0 12px;
   }
   #switcher.hidden { display: none; }
   #switcher button {
-    flex: 1 1 0; max-width: 190px;
-    padding: 13px 10px; font-size: .95rem;
+    /* Size to content and wrap, rather than sharing one row equally. */
+    flex: 0 1 auto; min-width: 0; max-width: 45%;
+    padding: 11px 15px; font-size: .88rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     background: rgba(10, 16, 28, .62);
     color: #fff;
     border: 1.5px solid rgba(255, 255, 255, .28);

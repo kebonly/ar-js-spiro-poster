@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.7.0] — 2026-09-13
+
+All eight movies are now wired up, one per barcode marker (0-7).
+
+### Fixed
+- **Six of the eight clips were not poster-safe.** They were added straight
+  from the imaging pipeline rather than through `tools/transcode.sh`:
+  - `density_vs_time.mp4` was **yuv444p**. iOS and Android H.264 decoders are
+    4:2:0 only, so it would have played on a laptop and refused on an iPhone.
+  - Six lacked `+faststart`. `density_vs_time` had its moov atom at byte
+    1,456,124 of 1,468,927, and `spiro-napari` at 9,817,875 of 9,821,700 —
+    99%+ of each file. Since `preload="metadata"` reads the moov atom for the
+    dimensions, this quietly defeated the lazy per-marker loading: page load
+    would have pulled almost everything.
+  - `spiro-napari` was 3024x1840, about 21 MB of GPU memory for a plane a few
+    centimetres across.
+  - `spiro-couette` carried an unused AAC track.
+
+  All re-encoded. Originals preserved in the git-ignored `source-video/`.
+  Total payload **36.9 MB -> 11.9 MB**.
+- **The switcher overflowed the screen with eight clips.** It was a single
+  non-wrapping flex row built for two or three buttons; at eight, buttons ran
+  off both edges of a phone and most were unreachable with no sign they
+  existed. Now wraps (3 rows at 375px) with every label fully visible.
+
+### Added
+- `tests/test_config.py` — validates `config.js` and the files it points at:
+  parses it with `node --check`, then checks barcode ids are integers 0-7,
+  that none are duplicated (two markers on one id render overlapping video
+  planes with no error), that every `src` exists, and that each file is
+  yuv420p with the moov atom at the front. The faststart check is pure stdlib
+  so it works without ffmpeg.
+- `tools/transcode.sh` generalised: processes everything in `source-video/`
+  (or named files), caps the longest edge, strips audio, forces yuv420p and
+  faststart, and verifies every output before exiting non-zero on a problem.
+
 ## [0.6.1] — 2026-09-13
 
 ### Fixed
