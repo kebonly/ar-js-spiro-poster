@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.1] — 2026-09-13
+
+### Changed
+- `LAYOUT.width` 2.4 -> 4.0, so the video is noticeably bigger the moment a
+  marker is picked up: ~320 mm across at an 80 mm marker, up from ~192 mm.
+  The pinch range is deliberately untouched at 0.4x-3.0x, which now spans an
+  effective width of 1.6-12.0 marker-widths.
+- `print.html` no longer hardcodes the clear-space boxes at the old 2.4 width.
+  The spiral's clearance box and the barcode halo are both derived from
+  `LAYOUT` at runtime, so changing the width reshapes them instead of leaving
+  the printed guidance quietly wrong.
+- Reworded the barcode sheet: the halo marks what the video **covers on
+  screen**, not an area that must be blank. At `width: 4.0` it is ~333 mm
+  square, which would be unusable advice read as "keep this empty" — the video
+  is an overlay and only hides what is underneath while someone is watching.
+- Re-encoded the replaced `spiro-napari.mp4`: 8.5 MB -> 1.7 MB. It arrived at
+  ~7 Mbps with the moov atom at the end, which would have defeated the lazy
+  per-marker loading. Its 738x742 source is now the master in `source-video/`.
+- README brought in line: it still described two clips, quoted the old 192 mm
+  video size, and pointed at `index.html` for the `LAYOUT` block that now
+  lives in `config.js`.
+
 ## [0.7.0] — 2026-09-13
 
 All eight movies are now wired up, one per barcode marker (0-7).

@@ -40,9 +40,12 @@
     padding: 0;
     text-align: center;
   }
+  /* --plane-w and --clear-h are set from LAYOUT at runtime, so changing
+     LAYOUT.width in config.js reshapes these boxes rather than leaving the
+     printed clear space silently wrong. */
   .clearance {
-    width: calc(var(--square-mm) * 2.7 * 1mm);
-    height: calc(var(--square-mm) * 2.9 * 1mm);
+    width: calc(var(--square-mm) * var(--plane-w) * 1mm);
+    height: calc(var(--square-mm) * var(--clear-h) * 1mm);
     border: 1.5px dashed #b9c3d4;
     border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
@@ -76,8 +79,8 @@
   /* A barcode marker's video is centred ON the marker, not above it, so the
      clear space it needs is a halo all round rather than a box overhead. */
   .bc .halo {
-    width:  calc(var(--square-mm) * 2.56 * 1mm);
-    height: calc(var(--square-mm) * 2.56 * 1mm);
+    width:  calc(var(--square-mm) * var(--plane-w) * 1mm);
+    height: calc(var(--square-mm) * var(--plane-w) * 1mm);
     border: 1.5px dashed #b9c3d4;
     border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
@@ -197,11 +200,21 @@
 <p class="noprint" style="margin:0 0 18px; color:#5b6880; font-size:.93rem">
   Put each of these beside the figure it belongs to. Unlike the spiral marker
   above, a barcode marker's video appears <strong>centred on the marker
-  itself</strong>, so the clear space it needs is the dashed halo all round
-  &mdash; roughly <span id="haloMM">205</span>&nbsp;mm square. Keep the white
-  margin, and don't worry about the video covering the marker: tracking reads
-  the real camera image, not what's drawn over it. These need no QR of their
-  own.
+  itself</strong>. The dashed halo &mdash; about
+  <strong><span id="haloMM">333</span>&nbsp;mm</strong> square at this marker
+  size &mdash; shows the area the video will <em>cover on screen</em> while
+  playing.
+</p>
+<p class="noprint" style="margin:0 0 18px; color:#5b6880; font-size:.93rem">
+  That area does <strong>not</strong> have to be blank on the poster. The video
+  is an overlay, so it simply hides whatever is underneath while a viewer is
+  watching &mdash; including the marker, which is fine, because tracking reads
+  the real camera image and not what we draw over it. Use the halo to decide
+  <em>where</em> each marker goes: put it where temporarily covering the
+  neighbours is acceptable, not where you need something always legible.
+  If the halo is bigger than you want, either print these markers smaller (the
+  video scales with them) or lower <code>LAYOUT.width</code> in
+  <code>config.js</code>. These need no QR of their own.
 </p>
 <div class="barcodes" id="barcodes"></div>
 
@@ -273,12 +286,23 @@
   function update() {
     var mm = Math.max(10, Number(sizeInput.value) || 80);
     var L = window.SPIRO_AR.LAYOUT;
-    document.documentElement.style.setProperty('--square-mm', mm);
+    var root = document.documentElement;
+
+    // Widest the plane ever gets, and how far its top edge reaches above the
+    // marker centre. Assumes a square clip — the worst case, so the reserved
+    // space is never too small for a wide one.
+    var planeW = L.width + L.bezelPad;
+    var clearH = L.offsetAbove + planeW / 2;
+
+    root.style.setProperty('--square-mm', mm);
+    root.style.setProperty('--plane-w', planeW);
+    root.style.setProperty('--clear-h', clearH);
+
     document.getElementById('echo').textContent = mm;
     document.getElementById('videoMM').textContent = Math.round(mm * L.width);
     document.getElementById('offsetMM').textContent = Math.round(mm * L.offsetAbove);
     var halo = document.getElementById('haloMM');
-    if (halo) halo.textContent = Math.round(mm * (L.width + L.bezelPad));
+    if (halo) halo.textContent = Math.round(mm * planeW);
 
     var url = urlInput.value.trim() || 'https://example.com';
     document.getElementById('urlEcho').textContent = url.replace(/^https?:\/\//, '');

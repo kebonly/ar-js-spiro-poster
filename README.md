@@ -2,9 +2,12 @@
 
 A marker-based AR experience for a scientific poster, built with
 [AR.js](https://github.com/AR-js-org/AR.js) and A-Frame. A viewer points their
-phone camera at a spiral marker printed on the poster and two microscopy
-recordings play in place, anchored to the paper. No app install — it runs in
-the mobile browser.
+phone camera at a marker printed on the poster and the microscopy recording
+for that figure plays in place, anchored to the paper. No app install — it runs
+in the mobile browser.
+
+Eight movies, each with its own printed barcode marker, plus a spiral marker
+that cycles through all of them.
 
 ```
 config.js              the movie list and layout — the one file to edit
@@ -17,7 +20,7 @@ assets/video/          web-optimised MP4s that get served
 vendor/                A-Frame 1.3.0 + AR.js 3.4.7 + qrcode-generator
 tools/                 marker generators, video transcoder, HTTPS dev server
 tests/                 encoding checks for both marker families
-source-video/          original .mov masters (git-ignored)
+source-video/          original masters, pre-compression (git-ignored)
 ```
 
 ## How the markers work
@@ -80,13 +83,19 @@ Open [`print.html`](print.html). It builds the callout that goes on the
 poster: the marker, a QR code to the live URL, and the three steps a viewer
 needs. Set the marker size in millimetres and print **at 100% scale**.
 
-The marker sits at the *top* of the callout deliberately — the video renders
-1.8 marker-widths above the marker, so anything placed above it gets covered.
-The dashed box shows the clear space to leave; it isn't printed.
+The spiral marker sits at the *top* of its callout deliberately — its video
+renders 1.8 marker-widths above it, so anything placed above gets covered. A
+**barcode** marker's video is centred *on* the marker instead, so its dashed
+box is a halo all round rather than a box overhead.
 
-At the default 80 mm marker the video renders about 192 mm wide, centred
-144 mm above the marker, and the QR is ~50 mm (1.2 mm per module, comfortable
-to scan at arm's length).
+At an 80 mm marker the video renders about **320 mm** wide (`width: 4.0`), and
+the QR is ~50 mm (1.2 mm per module, comfortable to scan at arm's length).
+
+The dashed area is what the video **covers on screen**, not something that must
+be blank on the poster — it is an overlay, so it just hides what's underneath
+while a viewer watches. Use it to decide where a marker goes. If it is bigger
+than you want, print that marker smaller (the video scales with it) or lower
+`LAYOUT.width`.
 
 Change the URL field if you ever move the site — the QR regenerates live.
 
@@ -108,12 +117,12 @@ expressed in marker widths.
 
 ## Adjusting the layout
 
-Everything you'd normally want to change sits in one `LAYOUT` block near the
-top of the `<script>` in [`index.html`](index.html):
+Everything you'd normally want to change sits in one `LAYOUT` block at the
+top of [`config.js`](config.js):
 
 ```js
 var LAYOUT = {
-  width:       2.4,    // video width
+  width:       4.0,    // video width
   offsetAbove: 1.8,    // height of the video's centre above the marker
   bezelPad:    0.16    // border visible around the video
 };
@@ -128,10 +137,10 @@ At the default 80 mm marker:
 
 | Setting | Value | On the poster |
 |---|---|---|
-| `width: 2.4` | 2.4 × 80 mm | video ~192 mm wide |
-| `offsetAbove: 1.8` | 1.8 × 80 mm | centre ~144 mm above the marker |
+| `width: 4.0` | 4.0 × 80 mm | video ~320 mm wide |
+| `offsetAbove: 1.8` | 1.8 × 80 mm | centre ~144 mm above the marker (spiral only; barcode markers use 0) |
 
-So to make the video half as big, set `width: 1.2`. To sit it closer to the
+So to make the video half as big, set `width: 2.0`. To sit it closer to the
 marker, lower `offsetAbove`. Only the height is derived — it comes from each
 clip's own aspect ratio, so the video is never stretched.
 
